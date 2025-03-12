@@ -258,7 +258,7 @@ try {
 
     if (!($updateImages)) {
         while ($updateInput -notin ("Y", "N", "Q")) {
-            $updateInput = Read-Host "`nDo you wish to update your Azure Stack HCI and Windows Server images automatically?`nThis will increase deployment time. Enter Y or N (or Q to exit)..."
+            $updateInput = Read-Host "`nDo you wish to update your Azure Local and Windows Server images automatically?`nThis will increase deployment time. Enter Y or N (or Q to exit)..."
             if ($updateInput -eq "Y") {
                 Write-Host "`nYou have chosen to update your images that are created during this process.`nThis will add additional time, but your images will have the latest patches." -ForegroundColor Green
                 $updateImages = "Yes"
@@ -370,7 +370,7 @@ try {
             Write-Host "`nWould you like to use custom external DNS forwarders?`n" 
             Write-Host "For a single DNS forwarder, use the format like this example: 8.8.8.8"
             Write-Host "For multiple DNS forwarders (maximum 2), use the format like this example, separated by a comma (,) and with no spaces: 8.8.8.8,1.1.1.1"
-            Write-Host "Alternatively, to use the default Hybrid Jumpstart DNS forwarders (8.8.8.8 and 1.1.1.1), simply press Enter to skip."
+            Write-Host "Alternatively, to use the default AzL DNS forwarders (8.8.8.8 and 1.1.1.1), simply press Enter to skip."
             $askDnsQuestion = Read-Host "`nEnter your external DNS forwarder(s) IP addresses, or press enter to skip"
             if ($askDnsQuestion.Length -eq 0) {
                 Write-Host "`nYou have not entered any custom external DNS forwarders - we will use 8.8.8.8 and 1.1.1.1 as your external DNS forwarders." -ForegroundColor Green
@@ -439,7 +439,7 @@ try {
     # Load the PowerShell file into memory
     . .\AzLWorkshop.ps1
 
-    AzLWorkshop -workshopPath $workshopPath -azureLocalArchitecture $azureLocalArchitecture -adminCreds $adminCreds `
+    AzLWorkshop -workshopPath $workshopPath -azureLocalArchitecture $azureLocalArchitecture -adminCreds $adminCreds -domainName $domainName `
         -azureLocalMachineMemory $azureLocalMachineMemory -telemetryLevel $telemetryLevel -updateImages $updateImages `
         -WindowsServerIsoPath $WindowsServerIsoPath -AzureLocalIsoPath $AzureLocalIsoPath -customDNSForwarders $customDNSForwarders
 
