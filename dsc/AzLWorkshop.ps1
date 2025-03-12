@@ -18,7 +18,7 @@ configuration AzLWorkshop
         [Parameter(Mandatory)]
         [String]$domainName,
         [String]$customRdpPort,
-        [String]$jumpstartPath,
+        [String]$workshopPath,
         [String]$WindowsServerIsoPath,
         [String]$AzureLocalIsoPath,
         [String]$customDNSForwarders
@@ -89,20 +89,20 @@ configuration AzLWorkshop
         if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
             # If this in Azure, lock things in specifically
             $targetDrive = "V"
-            $jumpstartPath = "$targetDrive" + ":\AzLWorkshop"
+            $workshopPath = "$targetDrive" + ":\AzLWorkshop"
         }
         else {
-            $jumpstartPath = "$jumpstartPath" + "\AzLWorkshop"
+            $workshopPath = "$workshopPath" + "\AzLWorkshop"
         }
 
-        $mslabLocalPath = "$jumpstartPath\mslab.zip"
-        $labConfigPath = "$jumpstartPath\LabConfig.ps1"
-        $parentDiskPath = "$jumpstartPath\ParentDisks"
+        $mslabLocalPath = "$workshopPath\mslab.zip"
+        $labConfigPath = "$workshopPath\LabConfig.ps1"
+        $parentDiskPath = "$workshopPath\ParentDisks"
         $updatePath = "$parentDiskPath\Updates"
         $cuPath = "$updatePath\CU"
         $ssuPath = "$updatePath\SSU"
-        $isoPath = "$jumpstartPath\ISO"
-        $flagsPath = "$jumpstartPath\Flags"
+        $isoPath = "$workshopPath\ISO"
+        $flagsPath = "$workshopPath\Flags"
         $azLocalVhdPath = "$parentDiskPath\AzL_G2.vhdx"
 
         $domainNetBios = $domainName.Split('.')[0]
@@ -145,32 +145,32 @@ configuration AzLWorkshop
 
             Script StoragePool {
                 SetScript  = {
-                    New-StoragePool -FriendlyName JumpstartPool -StorageSubSystemFriendlyName '*storage*' -PhysicalDisks (Get-PhysicalDisk -CanPool $true)
+                    New-StoragePool -FriendlyName WorkshopPool -StorageSubSystemFriendlyName '*storage*' -PhysicalDisks (Get-PhysicalDisk -CanPool $true)
                 }
                 TestScript = {
-                (Get-StoragePool -ErrorAction SilentlyContinue -FriendlyName JumpstartPool).OperationalStatus -eq 'OK'
+                (Get-StoragePool -ErrorAction SilentlyContinue -FriendlyName WorkshopPool).OperationalStatus -eq 'OK'
                 }
                 GetScript  = {
-                    @{Ensure = if ((Get-StoragePool -FriendlyName JumpstartPool).OperationalStatus -eq 'OK') { 'Present' } Else { 'Absent' } }
+                    @{Ensure = if ((Get-StoragePool -FriendlyName WorkshopPool).OperationalStatus -eq 'OK') { 'Present' } Else { 'Absent' } }
                 }
             }
             Script VirtualDisk {
                 SetScript  = {
-                    $disks = Get-StoragePool -FriendlyName JumpstartPool -IsPrimordial $False | Get-PhysicalDisk
+                    $disks = Get-StoragePool -FriendlyName WorkshopPool -IsPrimordial $False | Get-PhysicalDisk
                     $diskNum = $disks.Count
-                    New-VirtualDisk -StoragePoolFriendlyName JumpstartPool -FriendlyName JumpstartDisk -ResiliencySettingName Simple -NumberOfColumns $diskNum -UseMaximumSize
+                    New-VirtualDisk -StoragePoolFriendlyName WorkshopPool -FriendlyName WorkshopDisk -ResiliencySettingName Simple -NumberOfColumns $diskNum -UseMaximumSize
                 }
                 TestScript = {
-                (Get-VirtualDisk -ErrorAction SilentlyContinue -FriendlyName JumpstartDisk).OperationalStatus -eq 'OK'
+                (Get-VirtualDisk -ErrorAction SilentlyContinue -FriendlyName WorkshopDisk).OperationalStatus -eq 'OK'
                 }
                 GetScript  = {
-                    @{Ensure = if ((Get-VirtualDisk -FriendlyName JumpstartDisk).OperationalStatus -eq 'OK') { 'Present' } Else { 'Absent' } }
+                    @{Ensure = if ((Get-VirtualDisk -FriendlyName WorkshopDisk).OperationalStatus -eq 'OK') { 'Present' } Else { 'Absent' } }
                 }
                 DependsOn  = "[Script]StoragePool"
             }
             Script FormatDisk {
                 SetScript  = {
-                    $vDisk = Get-VirtualDisk -FriendlyName JumpstartDisk
+                    $vDisk = Get-VirtualDisk -FriendlyName WorkshopDisk
                     if ($vDisk | Get-Disk | Where-Object PartitionStyle -eq 'raw') {
                         $vDisk | Get-Disk | Initialize-Disk -Passthru | New-Partition -DriveLetter $Using:targetDrive -UseMaximumSize | Format-Volume -NewFileSystemLabel AzLWorkshop -AllocationUnitSize 64KB -FileSystem NTFS
                     }
@@ -187,17 +187,17 @@ configuration AzLWorkshop
                 DependsOn  = "[Script]VirtualDisk"
             }
 
-            File "JumpstartFolder" {
+            File "WorkshopFolder" {
                 Type            = 'Directory'
-                DestinationPath = $jumpstartPath
+                DestinationPath = $workshopPath
                 DependsOn       = "[Script]FormatDisk"
             }
         }
         else {
             # Running on-prem, outside of Azure
-            File "JumpstartFolder" {
+            File "WorkshopFolder" {
                 Type            = 'Directory'
-                DestinationPath = $jumpstartPath
+                DestinationPath = $workshopPath
             }
         }
 
@@ -205,14 +205,14 @@ configuration AzLWorkshop
             DestinationPath = $isoPath
             Type            = 'Directory'
             Force           = $true
-            DependsOn       = "[File]JumpstartFolder"
+            DependsOn       = "[File]WorkshopFolder"
         }
 
         File "flagsPath" {
             DestinationPath = $flagsPath
             Type            = 'Directory'
             Force           = $true
-            DependsOn       = "[File]JumpstartFolder"
+            DependsOn       = "[File]WorkshopFolder"
         }
 
         File "WSISOpath" {
@@ -233,7 +233,7 @@ configuration AzLWorkshop
             DestinationPath = $parentDiskPath
             Type            = 'Directory'
             Force           = $true
-            DependsOn       = "[File]JumpstartFolder"
+            DependsOn       = "[File]WorkshopFolder"
         }
 
         File "Updates" {
@@ -273,7 +273,7 @@ configuration AzLWorkshop
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
-            DependsOn  = "[File]JumpstartFolder"
+            DependsOn  = "[File]WorkshopFolder"
         }
 
         Script "Extract MSLab" {
@@ -283,7 +283,7 @@ configuration AzLWorkshop
             }
 
             SetScript  = {
-                Expand-Archive -Path "$Using:mslabLocalPath" -DestinationPath "$Using:jumpstartPath" -Force
+                Expand-Archive -Path "$Using:mslabLocalPath" -DestinationPath "$Using:workshopPath" -Force
                 #$extractedFlag = "$Using:flagsPath\MSLabExtracted.txt"
                 #New-Item $extractedFlag -ItemType file -Force
             }
@@ -484,7 +484,7 @@ configuration AzLWorkshop
                     $exclusionPath = "$Using:targetDrive" + ":\"
                     @{Ensure = if ((Get-MpPreference).ExclusionPath -contains "$exclusionPath") { 'Present' } Else { 'Absent' } }
                 }
-                DependsOn  = "[File]JumpstartFolder"
+                DependsOn  = "[File]WorkshopFolder"
             }
 
             #### REGISTRY & FIREWALL TWEAKS FOR AZURE VM ####
@@ -580,7 +580,7 @@ configuration AzLWorkshop
                 SetScript  = {
                     # Create Azure Local Host Image from ISO
                 
-                    $scratchPath = "$Using:jumpstartPath\Scratch"
+                    $scratchPath = "$Using:workshopPath\Scratch"
                     New-Item -ItemType Directory -Path "$scratchPath" -Force | Out-Null
                 
                     # Determine if any SSUs are available
@@ -653,7 +653,7 @@ configuration AzLWorkshop
                 }
 
                 SetScript  = {
-                    Set-Location "$Using:jumpstartPath"
+                    Set-Location "$Using:workshopPath"
                     .\1_Prereq.ps1
                     $preReqFlag = "$Using:flagsPath\PreReqComplete.txt"
                     New-Item $preReqFlag -ItemType file -Force
@@ -674,7 +674,7 @@ configuration AzLWorkshop
                 }
 
                 SetScript  = {
-                    Set-Location "$Using:jumpstartPath"
+                    Set-Location "$Using:workshopPath"
                     .\2_CreateParentDisks.ps1
                     $parentDiskFlag = "$Using:flagsPath\CreateDisksComplete.txt"
                     New-Item $parentDiskFlag -ItemType file -Force
@@ -695,7 +695,7 @@ configuration AzLWorkshop
                 }
 
                 SetScript  = {
-                    Set-Location "$Using:jumpstartPath"
+                    Set-Location "$Using:workshopPath"
                     .\Deploy.ps1
                     $deployFlag = "$Using:flagsPath\DeployComplete.txt"
                     New-Item $deployFlag -ItemType file -Force
@@ -714,7 +714,7 @@ configuration AzLWorkshop
             if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
                 $azureUsername = $($Admincreds.UserName)
                 $desktopPath = "C:\Users\$azureUsername\Desktop"
-                $rdpConfigPath = "$jumpstartPath\$vmPrefix-DC.rdp"
+                $rdpConfigPath = "$workshopPath\$vmPrefix-DC.rdp"
             }
             else {
                 $desktopPath = [Environment]::GetFolderPath("Desktop")
