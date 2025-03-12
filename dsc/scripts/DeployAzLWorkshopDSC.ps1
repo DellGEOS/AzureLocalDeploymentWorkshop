@@ -175,6 +175,7 @@ try {
                     .$askForArchitecture
                 }
             }
+            Write-Host "`nYou have chosen to deploy the $azureLocalArchitecture Azure Local architecture..." -ForegroundColor Green
         }
         .$askForArchitecture
         if ($azureLocalArchitecture -ne 'Q') {
@@ -187,20 +188,20 @@ try {
     elseif ($azureLocalArchitecture -notin ("Single Machine", "2-Machine Non-Converged", "2-Machine Fully-Converged", "2-Machine Switchless Dual-Link", "3-Machine Non-Converged", "3-Machine Fully-Converged",
             "3-Machine Switchless Single-Link", "3-Machine Switchless Dual-Link", "4-Machine Non-Converged", "4-Machine Fully-Converged", "4-Machine Switchless Dual-Link")) {
         Write-Host "Incorrect Azure Local architecture specified.`nPlease re-run the script using one of the supported values" -ForegroundColor Red
-        break
+        exit
+    }
+    else {
+        Write-Host "`nYou have chosen to deploy the $azureLocalArchitecture Azure Local architecture..." -ForegroundColor Green
     }
 
     if (!($azureLocalMachineMemory)) {
         $askForMachineMemory = {
-            $azureLocalMachineMemory = Read-Host "`nSelect the memory for each of your Azure Stack HCI nodes - Enter 16, 24, 32, or 48 (or Q to exit)..."
+            $azureLocalMachineMemory = Read-Host "`nSelect the memory for each of your Azure Local machines - Enter 16, 24, 32, or 48 (or Q to exit)..."
             switch ($azureLocalMachineMemory) {
-                '4' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Stack HCI nodes..." -ForegroundColor Green }
-                '8' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Stack HCI nodes..." -ForegroundColor Green }
-                '12' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Stack HCI nodes..." -ForegroundColor Green }
-                '16' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Stack HCI nodes..." -ForegroundColor Green }
-                '24' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Stack HCI nodes..." -ForegroundColor Green }
-                '32' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Stack HCI nodes..." -ForegroundColor Green }
-                '48' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Stack HCI nodes..." -ForegroundColor Green }
+                '16' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Local machines..." -ForegroundColor Green }
+                '24' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Local machines..." -ForegroundColor Green }
+                '32' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Local machines..." -ForegroundColor Green }
+                '48' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Local machines..." -ForegroundColor Green }
                 'Q' {
                     Write-Host 'Exiting...' -ForegroundColor Red
                     Start-Sleep -seconds 5
@@ -221,7 +222,7 @@ try {
         }
     }
     elseif ($azureLocalMachineMemory -notin ("16", "24", "32", "48")) {
-        Write-Host "Incorrect amount of memory for your Azure Stack HCI nodes specified.`nPlease re-run the script using with either 16, 24, 32, or 48" -ForegroundColor Red
+        Write-Host "Incorrect amount of memory for your Azure Local machines specified.`nPlease re-run the script using with either 16, 24, 32, or 48" -ForegroundColor Red
         break
     }
     elseif ($azureLocalMachineMemory -in ("16", "24", "32", "48")) {
@@ -339,14 +340,14 @@ try {
     if (!($AutoDownloadAzLiso)) {
         if (!($AzureLocalIsoPath)) {
             Write-Host "`nHave you downloaded the latest Azure Local ISO? If not, one will be downloaded automatically for you"
-            $AzSIsoAvailable = Read-Host "Enter Y or N"
-            if ($AzSIsoAvailable -eq "Y") {
-                Write-Host "`nPlease select latest Azure Stack HCI 23H2 ISO..."
+            $AzLIsoAvailable = Read-Host "Enter Y or N"
+            if ($AzLIsoAvailable -eq "Y") {
+                Write-Host "`nPlease select latest Azure Local ISO..."
                 Start-Sleep -Seconds 3
                 Add-Type -AssemblyName System.Windows.Forms
                 #[reflection.assembly]::loadwithpartialname("System.Windows.Forms")
                 $openFile = New-Object System.Windows.Forms.OpenFileDialog -Property @{
-                    Title = "Please select latest Azure Stack HCI 23H2 ISO..."
+                    Title = "Please select latest Azure Local ISO..."
                 }
                 $openFile.Filter = "iso files (*.iso)|*.iso|All files (*.*)|*.*" 
                 if ($openFile.ShowDialog() -eq "OK") {
@@ -360,7 +361,7 @@ try {
                 }
             }
             else {
-                Write-Host "`nNo Azure Stack HCI 23H2 ISO has been provided. One will be downloaded for you during deployment." -ForegroundColor Green
+                Write-Host "`nNo Azure Local ISO has been provided. One will be downloaded for you during deployment." -ForegroundColor Green
             }
         }
     }

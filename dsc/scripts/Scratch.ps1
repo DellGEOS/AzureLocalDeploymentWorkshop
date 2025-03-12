@@ -1,49 +1,56 @@
-# Firstly, validate if Hyper-V is installed and prompt to enable and reboot if not
-Write-Host "Checking if required Hyper-V role/features are installed..."
-$hypervState = Get-WindowsOptionalFeature -Online -FeatureName *Hyper-V* | Where-Object { $_.State -eq "Disabled" }
-
-if ($hypervState) {
-    Write-Host "`nThe following Hyper-V role/features are missing:`n"
-    $hypervState.DisplayName | ForEach-Object { Write-Host $_ }
-
-    Write-Host "`nDo you wish to enable them now?" -ForegroundColor Green
-    if ((Read-Host "(Type Y or N)") -eq "Y") {
-        Write-Host "`nYou chose to install the required Hyper-V role/features.`nYou will be prompted to reboot your machine once completed.`nRerun this script when back online..."
-        Start-Sleep -Seconds 10
-
-        $reboot = $false
-        foreach ($feature in $hypervState) {
-            $rebootCheck = Enable-WindowsOptionalFeature -Online -FeatureName $feature.FeatureName -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
-            if ($rebootCheck.RestartNeeded) {
-                $reboot = $true
+if (!($azureLocalArchitecture)) {
+    $askForArchitecture = {
+        Write-Host "`nPlease select the Azure Local architecture you'd like to deploy..."
+        Write-Host "1. Single Machine"
+        Write-Host "2. 2-Machine Non-Converged"
+        Write-Host "3. 2-Machine Fully-Converged"
+        Write-Host "4. 2-Machine Switchless Dual-Link"
+        Write-Host "5. 3-Machine Non-Converged"
+        Write-Host "6. 3-Machine Fully-Converged"
+        Write-Host "7. 3-Machine Switchless Single-Link"
+        Write-Host "8. 3-Machine Switchless Dual-Link"
+        Write-Host "9. 4-Machine Non-Converged"
+        Write-Host "10. 4-Machine Fully-Converged"
+        Write-Host "11. 4-Machine Switchless Dual-Link"
+        Write-Host "Or enter 'Q' to exit"
+        $architectureChoice = Read-Host "`nEnter the number of the Azure Local architecture you'd like to deploy"
+        switch ($architectureChoice) {
+            '1' { $azureLocalArchitecture = "Single Machine" }
+            '2' { $azureLocalArchitecture = "2-Machine Non-Converged" }
+            '3' { $azureLocalArchitecture = "2-Machine Fully-Converged" }
+            '4' { $azureLocalArchitecture = "2-Machine Switchless Dual-Link" }
+            '5' { $azureLocalArchitecture = "3-Machine Non-Converged" }
+            '6' { $azureLocalArchitecture = "3-Machine Fully-Converged" }
+            '7' { $azureLocalArchitecture = "3-Machine Switchless Single-Link" }
+            '8' { $azureLocalArchitecture = "3-Machine Switchless Dual-Link" }
+            '9' { $azureLocalArchitecture = "4-Machine Non-Converged" }
+            '10' { $azureLocalArchitecture = "4-Machine Fully-Converged" }
+            '11' { $azureLocalArchitecture = "4-Machine Switchless Dual-Link" }
+            'Q' {
+                Write-Host 'Exiting...' -ForegroundColor Red
+                Start-Sleep -seconds 5
+                break 
+            }
+            default {
+                Write-Host "Invalid architecture choice entered. Try again." -ForegroundColor Yellow
+                .$askForArchitecture
             }
         }
-
-        if ($reboot) {
-            Write-Host "`nInstall completed. A reboot is required to finish installation - reboot now?`nIf not, you will need to reboot before deploying the Hybrid Jumpstart..." -ForegroundColor Green
-            if ((Read-Host "(Type Y or N)") -eq "Y") {
-                Start-Sleep -Seconds 5
-                Restart-Computer -Force
-            }
-            else {
-                Write-Host 'You did not enter "Y" to confirm rebooting your host. Exiting...' -ForegroundColor Red
-                break
-            }
-        }
-        else {
-            Write-Host "Install completed. No reboot is required at this time. Continuing process..." -ForegroundColor Green
-        }
+        Write-Host "`nYou have chosen to deploy the $azureLocalArchitecture Azure Local architecture..." -ForegroundColor Green
+    }
+    .$askForArchitecture
+    if ($azureLocalArchitecture -ne 'Q') {
+        Write-Host "`nYou have chosen to deploy the $azureLocalArchitecture Azure Local architecture..." -ForegroundColor Green
     }
     else {
-        Write-Host 'You did not enter "Y" to confirm installing the required Hyper-V role/features. Exiting...' -ForegroundColor Red
         break
     }
 }
-else {
-    Write-Host "`nAll required Hyper-V role/features are present. Continuing process..." -ForegroundColor Green
+elseif ($azureLocalArchitecture -notin ("Single Machine", "2-Machine Non-Converged", "2-Machine Fully-Converged", "2-Machine Switchless Dual-Link", "3-Machine Non-Converged", "3-Machine Fully-Converged",
+        "3-Machine Switchless Single-Link", "3-Machine Switchless Dual-Link", "4-Machine Non-Converged", "4-Machine Fully-Converged", "4-Machine Switchless Dual-Link")) {
+    Write-Host "Incorrect Azure Local architecture specified.`nPlease re-run the script using one of the supported values" -ForegroundColor Red
+    exit
 }
-
-$adminCreds = Get-Credential -UserName "LocalAdmin" -Message "Enter the credentials for the Azure Local nested environment in the form username\password."
-
-.\DeployAzLWorkshopDSC.ps1 -adminCreds $adminCreds -azureLocalArchitecture '2-Machine Fully-Converged' -azureLocalMachineMemory 24 -workshopPath "V:\AzLWorkshop" `
--updateImages "No" -domainName "azl.lab" -WindowsServerIsoPath "V:\ISO\WS2022\WS2022.iso" -telemetryLevel "Full" -AzureLocalIsoPath "V:\ISO\AZL\AzL.iso"
+else {
+    Write-Host "`nYou have chosen to deploy the $azureLocalArchitecture Azure Local architecture..." -ForegroundColor Green
+}
