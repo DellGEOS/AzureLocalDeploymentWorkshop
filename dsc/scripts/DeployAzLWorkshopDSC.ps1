@@ -4,8 +4,11 @@ param
     [ValidateSet("Single Machine", "2-Machine Non-Converged", "2-Machine Fully-Converged", "2-Machine Switchless Dual-Link", "3-Machine Non-Converged", "3-Machine Fully-Converged",
         "3-Machine Switchless Single-Link", "3-Machine Switchless Dual-Link", "4-Machine Non-Converged", "4-Machine Fully-Converged", "4-Machine Switchless Dual-Link")]
     [String]$azureLocalArchitecture,
+    [ValidateSet("16", "24", "32", "48")]
     [String]$azureLocalMachineMemory,
+    [ValidateSet("None", "Basic", "Full")]
     [String]$telemetryLevel,
+    [ValidateSet("No", "Yes")]
     [String]$updateImages,
     [String]$workshopPath,
     [String]$domainName,
