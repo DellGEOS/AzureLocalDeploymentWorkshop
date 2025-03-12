@@ -42,14 +42,50 @@ try {
         $adminCreds = Get-Credential -UserName "LocalAdmin" -Message "Enter the credentials for the Azure Local nested environment in the form username\password."
         if (!($adminCreds)) {
             Write-Host "No credentials provided. Exiting..." -ForegroundColor Red
+            Start-Sleep -Seconds 5
             break
         }
     }
     # Check the password length and complexity
     $password = $adminCreds.GetNetworkCredential().Password
     if ($password.Length -lt 12 -or $password -notmatch "^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{12,}$") {
-        Write-Host "The password provided does not meet the complexity requirements. Please provide a password that is at least 12 characters long, and contains at least one of each of the following: uppercase, lowercase, number and special character." -ForegroundColor Red
+        Write-Host "The password provided does not meet the complexity requirements. Please rerun the script and provide a password that is at least 12 characters long, and contains at least one of each of the following: uppercase, lowercase, number and special character." -ForegroundColor Red
+        Start-Sleep -Seconds 5
         break
+    }
+
+    # Need to ensure that $domainName is provided, and that it is a valid domain name, with a maximum of 1 subdomain
+    if (!($domainName)) {
+        $pattern = "^(?!:\/\/)(?!-)([a-zA-Z0-9-_]+\.)?[a-zA-Z0-9][a-zA-Z0-9-_]+\.[a-zA-Z]{2,11}?$"
+        $retryCount = 0
+        do {
+            Write-Host "`nPlease provide the domain name for the Azure Local workshop environment."
+            Write-Host "The domain name should be in the format azl.lab, or corp.azl.lab. A maximum of a single subdomain is supported."
+            $domainName = Read-Host "`nEnter the domain name for the Azure Local workshop environment"
+            $domainName = $domainName -replace '\s', ''
+            if ($domainName -notmatch $pattern) {
+                Write-Host "Invalid domain name, please try again" -ForegroundColor Yellow
+                $retryCount++
+            }
+        } while (($domainName -eq '' -or $domainName -notmatch $pattern) -and ($retryCount -lt 1))
+        
+        if ($domainName -eq '' -or $domainName -notmatch $pattern) {
+            Write-Host "Invalid domain name provided. Exiting..." -ForegroundColor Red
+            break
+        }
+    }
+    elseif ($domainName) {
+        # Provide user with 1 chance to enter a correct domain name
+        $pattern = "^(?!:\/\/)(?!-)([a-zA-Z0-9-_]+\.)?[a-zA-Z0-9][a-zA-Z0-9-_]+\.[a-zA-Z]{2,11}?$"
+        if ($domainName -notmatch $pattern) {
+            Write-Host "Invalid domain name provided. Please try again." -ForegroundColor Yellow
+            $domainName = Read-Host "`nEnter the domain name for the Azure Local workshop environment"
+            $domainName = $domainName -replace '\s', ''
+            if ($domainName -notmatch $pattern) {
+                Write-Host "Invalid domain name provided. Exiting..." -ForegroundColor Red
+                break
+            }
+        }
     }
 
     # Ensure WinRM is configured to allow DSC to run
@@ -63,7 +99,7 @@ try {
     if ($hypervState) {
         Write-Host "`nThe following Hyper-V role/features are missing:`n"
         foreach ($feature in $hypervState) {
-            "$($feature.DisplayName)"
+            "$($feature.FeatureName)"
         }
         Write-Host "`nDo you wish to enable them now?" -ForegroundColor Green
         if ((Read-Host "(Type Y or N)") -eq "Y") {
@@ -71,13 +107,13 @@ try {
             Start-Sleep -Seconds 10
             $reboot = $false
             foreach ($feature in $hypervState) {
-                $rebootCheck = Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
+                $rebootCheck = Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -All -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
                 if ($($rebootCheck.RestartNeeded) -eq $true) {
                     $reboot = $true
                 }
             }
             if ($reboot -eq $true) {
-                Write-Host "`nInstall completed. A reboot is required to finish installation - reboot now?`nIf not, you will need to reboot before deploying the Hybrid Jumpstart..." -ForegroundColor Green
+                Write-Host "`nInstall completed. A reboot is required to finish installation - reboot now?`nIf not, you will need to reboot before deploying the Azure Local workshop..." -ForegroundColor Green
                 if ((Read-Host "(Type Y or N)") -eq "Y") {
                     Start-Sleep -Seconds 5
                     Restart-Computer -Force

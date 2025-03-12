@@ -42,3 +42,8 @@ if ($hypervState) {
 else {
     Write-Host "`nAll required Hyper-V role/features are present. Continuing process..." -ForegroundColor Green
 }
+
+$adminCreds = Get-Credential -UserName "LocalAdmin" -Message "Enter the credentials for the Azure Local nested environment in the form username\password."
+
+.\DeployAzLWorkshopDSC.ps1 -adminCreds $adminCreds -azureLocalArchitecture '2-Machine Fully-Converged' -azureLocalMachineMemory 24 -workshopPath "V:\AzLWorkshop" `
+-updateImages "No" -domainName "azl.lab" -WindowsServerIsoPath "V:\ISO\WS2022\WS2022.iso" -telemetryLevel "Full" -AzureLocalIsoPath "V:\ISO\AZL\AzL.iso"
