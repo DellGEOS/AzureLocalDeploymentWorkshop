@@ -55,19 +55,11 @@ configuration AzLWorkshop
         $dateStamp = Get-Date -UFormat %d%b%y
         $vmPrefix = "AzLWorkshop-$dateStamp"
 
-        # Calculate the number of Azure Local machines that are required, before calculating memory sizing
-        if ($azureLocalArchitecture -eq "Single Machine") {
-            $azureLocalMachines = 1
-        }
-        else {
-            # Take the first character of the architecture string to determine the number of machines
-            $azureLocalMachines = [INT]$azureLocalArchitecture.Substring(0, 1)
-        }
+        # Calculate the number of Azure Local machines required
+        $azureLocalMachines = if ($azureLocalArchitecture -eq "Single Machine") { 1 } else { [INT]$azureLocalArchitecture.Substring(0, 1) }
 
-        # Determine vSwitch name for Azure VM host, based on azureLocalArchitecture
+        # Determine vSwitch name and allowed VLANs based on azureLocalArchitecture
         $vSwitchName = if ($azureLocalArchitecture -like "*Fully-Converged*") { "Mgmt_Compute_Stor" } else { "Mgmt_Compute" }
-
-        # Determine allowedVLANs for Azure VM host, based on azureLocalArchitecture
         $allowedVlans = if ($azureLocalArchitecture -like "*Fully-Converged*") { "1-10,711-719" } else { "1-10" }
 
         # Calculate Host Memory Sizing to account for oversizing
@@ -898,7 +890,7 @@ configuration AzLWorkshop
                 DependsOn  = "[Script]Deploy WAC"
             }
 
-            # Create the Host vSwitches to align with the desired azureLocalArchitecture
+            # Create the Host vSwitches and vNICs to align with the desired azureLocalArchitecture
             if ($azureLocalArchitecture -like "*Non-Converged") {
                 VMSwitch "CreateNonConvergedSwitch" {
                     Name      = "Storage"
@@ -920,29 +912,6 @@ configuration AzLWorkshop
                             DependsOn  = "[VMSwitch]CreateNonConvergedSwitch"
                         }
                     }
-                }
-                # Set the 711-719 VLAN IDs for the Storage vNICs and ensure in Trunk mode
-                Script "SetStorageVLANs" {
-                    GetScript  = {
-                        $result = $true
-                        return @{ 'Result' = $result }
-                    }
-                    SetScript  = {
-                        $vms = Get-VM | Where-Object Name -like "*AzL*"
-                        foreach ($vm in $vms) {
-                            $nics = Get-VMNetworkAdapter -VMName $vm.Name | Where-Object Name -like "Storage*"
-                            foreach ($nic in $nics) {
-                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Access -VlanId 0
-                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Trunk -AllowedVlanIdList 711-719
-                            }
-                        }
-                    }
-                    TestScript = {
-                        # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                        $state = [scriptblock]::Create($GetScript).Invoke()
-                        return $state.Result
-                    }
-                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1NIC", "[VMNetworkAdapter]CreateStorage2NIC")
                 }
             }
             elseif ($azureLocalArchitecture -eq "2-Machine Switchless Dual-Link") {
@@ -967,29 +936,6 @@ configuration AzLWorkshop
                             DependsOn  = "[VMSwitch]CreateStorageSwitches"
                         }
                     }
-                }
-                # Set the 711-719 VLAN IDs for the Storage vNICs and ensure in Trunk mode
-                Script "SetStorageVLANs" {
-                    GetScript  = {
-                        $result = $true
-                        return @{ 'Result' = $result }
-                    }
-                    SetScript  = {
-                        $vms = Get-VM | Where-Object Name -like "*AzL*"
-                        foreach ($vm in $vms) {
-                            $nics = Get-VMNetworkAdapter -VMName $vm.Name | Where-Object Name -like "Storage*"
-                            foreach ($nic in $nics) {
-                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Access -VlanId 0
-                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Trunk -AllowedVlanIdList 711-719
-                            }
-                        }
-                    }
-                    TestScript = {
-                        # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                        $state = [scriptblock]::Create($GetScript).Invoke()
-                        return $state.Result
-                    }
-                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage2-1NIC")
                 }
             }
             # Create vSwitch and vNICs for 3-machine switchless single-link architectures
@@ -1020,29 +966,6 @@ configuration AzLWorkshop
                         }
                     }
                 }
-                # Set the 711-719 VLAN IDs for the Storage vNICs and ensure in Trunk mode
-                Script "SetStorageVLANs" {
-                    GetScript  = {
-                        $result = $true
-                        return @{ 'Result' = $result }
-                    }
-                    SetScript  = {
-                        $vms = Get-VM | Where-Object Name -like "*AzL*"
-                        foreach ($vm in $vms) {
-                            $nics = Get-VMNetworkAdapter -VMName $vm.Name | Where-Object Name -like "Storage*"
-                            foreach ($nic in $nics) {
-                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Access -VlanId 0
-                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Trunk -AllowedVlanIdList 711-719
-                            }
-                        }
-                    }
-                    TestScript = {
-                        # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                        $state = [scriptblock]::Create($GetScript).Invoke()
-                        return $state.Result
-                    }
-                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-3NIC")
-                }
             }
             # Create vSwitch and vNICs for 3-machine switchless dual-link architectures
             elseif ($azureLocalArchitecture -like "3-Machine Switchless Dual-Link") {
@@ -1071,31 +994,7 @@ configuration AzLWorkshop
                         }
                     }
                 }
-                # Set the 711-719 VLAN IDs for the Storage vNICs and ensure in Trunk mode
-                Script "SetStorageVLANs" {
-                    GetScript  = {
-                        $result = $true
-                        return @{ 'Result' = $result }
-                    }
-                    SetScript  = {
-                        $vms = Get-VM | Where-Object Name -like "*AzL*"
-                        foreach ($vm in $vms) {
-                            $nics = Get-VMNetworkAdapter -VMName $vm.Name | Where-Object Name -like "Storage*"
-                            foreach ($nic in $nics) {
-                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Access -VlanId 0
-                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Trunk -AllowedVlanIdList 711-719
-                            }
-                        }
-                    }
-                    TestScript = {
-                        # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                        $state = [scriptblock]::Create($GetScript).Invoke()
-                        return $state.Result
-                    }
-                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC")
-                }
             }
-
             # Create vSwitch and vNICs for 4-machine switchless dual-link architectures
             elseif ($azureLocalArchitecture -like "4-Machine Switchless Dual-Link") {
                 # Create 12 private vSwitches named "Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2", "Storage1-3", "Storage3-1", "Storage1-4", "Storage4-1", "Storage2-4", "Storage4-2", "Storage3-4", and "Storage4-3"
@@ -1124,27 +1023,41 @@ configuration AzLWorkshop
                         }
                     }
                 }
-                # Set the 711-719 VLAN IDs for the Storage vNICs and ensure in Trunk mode
-                Script "SetStorageVLANs" {
-                    GetScript  = {
-                        $result = $true
-                        return @{ 'Result' = $result }
-                    }
-                    SetScript  = {
-                        $vms = Get-VM | Where-Object Name -like "*AzL*"
-                        foreach ($vm in $vms) {
-                            $nics = Get-VMNetworkAdapter -VMName $vm.Name | Where-Object Name -like "Storage*"
-                            foreach ($nic in $nics) {
-                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Access -VlanId 0
-                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Trunk -AllowedVlanIdList 711-719
-                            }
+            }
+            Script "SetStorageVLANs" {
+                GetScript  = {
+                    $result = $true
+                    return @{ 'Result' = $result }
+                }
+                SetScript  = {
+                    $vms = Get-VM | Where-Object Name -like "*AzL*"
+                    foreach ($vm in $vms) {
+                        $nics = Get-VMNetworkAdapter -VMName $vm.Name | Where-Object Name -like "Storage*"
+                        foreach ($nic in $nics) {
+                            Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Access -VlanId 0
+                            Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Trunk -AllowedVlanIdList 711-719
                         }
                     }
-                    TestScript = {
-                        # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                        $state = [scriptblock]::Create($GetScript).Invoke()
-                        return $state.Result
-                    }
+                }
+                TestScript = {
+                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                # Select the appropriate DependsOn based on the architecture
+                if ($azureLocalArchitecture -like "*Non-Converged") {
+                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1NIC", "[VMNetworkAdapter]CreateStorage2NIC")
+                }
+                elseif ($azureLocalArchitecture -eq "2-Machine Switchless Dual-Link") {
+                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage2-1NIC")
+                }
+                elseif ($azureLocalArchitecture -eq "3-Machine Switchless Single-Link") {
+                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-3NIC")
+                }
+                elseif ($azureLocalArchitecture -eq "3-Machine Switchless Dual-Link") {
+                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC")
+                }
+                elseif ($azureLocalArchitecture -eq "4-Machine Switchless Dual-Link") {
                     DependsOn  = @("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage1-4NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage2-4NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC", "[VMNetworkAdapter]CreateStorage3-4NIC", "[VMNetworkAdapter]CreateStorage4-1NIC", "[VMNetworkAdapter]CreateStorage4-2NIC", "[VMNetworkAdapter]CreateStorage4-3NIC")
                 }
             }
