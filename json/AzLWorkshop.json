@@ -419,8 +419,8 @@
     "variables": {
         "dataDisksCount": 8,
         "updateImages": "No",
-        "dscUri": "https://github.com/DellGEOS/HybridJumpstart/raw/main/dsc/AzureLocalWorkshop.zip",
-        "artifactsLocation": "https://raw.githubusercontent.com/DellGEOS/HybridJumpstart/main/",
+        "dscUri": "https://github.com/DellGEOS/AzureLocalDeploymentWorkshop/raw/main/dsc/AzureLocalWorkshop.zip",
+        "artifactsLocation": "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/",
         "randomGUID": "[substring(uniqueString(subscription().subscriptionId, resourceGroup().id, parameters('virtualMachineName')),0,6)]",
         "dnsNameForPublicIP": "[toLower(concat(parameters('virtualMachineName'), variables('randomGUID')))]",
         "virtualNetworkName": "[concat(parameters('virtualMachineName'), 'vNET')]",

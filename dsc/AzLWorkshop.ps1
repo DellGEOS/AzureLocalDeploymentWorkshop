@@ -64,6 +64,12 @@ configuration AzLWorkshop
             $azureLocalMachines = [INT]$azureLocalArchitecture.Substring(0, 1)
         }
 
+        # Determine vSwitch name for Azure VM host, based on azureLocalArchitecture
+        $vSwitchName = if ($azureLocalArchitecture -like "*Fully-Converged*") { "Mgmt_Compute_Stor" } else { "Mgmt_Compute" }
+
+        # Determine allowedVLANs for Azure VM host, based on azureLocalArchitecture
+        $allowedVlans = if ($azureLocalArchitecture -like "*Fully-Converged*") { "1-10,711-719" } else { "1-10" }
+
         # Calculate Host Memory Sizing to account for oversizing
         [INT]$totalFreePhysicalMemory = Get-CimInstance Win32_OperatingSystem -Verbose:$false | ForEach-Object { [math]::round($_.FreePhysicalMemory / 1MB) }
         [INT]$totalInfraMemoryRequired = "4"
@@ -534,240 +540,268 @@ configuration AzLWorkshop
                     Description = 'Firewall Rule for Custom RDP Port'
                 }
             }
-        }
 
-        #### ENABLE & CONFIG HYPER-V ####
+            #### ENABLE & CONFIG HYPER-V ####
 
-        $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
-        if ($osInfo.ProductType -eq 3) {
-            WindowsFeature "Hyper-V" {
-                Name   = "Hyper-V"
-                Ensure = "Present"
-            }
+            $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
+            if ($osInfo.ProductType -eq 3) {
+                WindowsFeature "Hyper-V" {
+                    Name   = "Hyper-V"
+                    Ensure = "Present"
+                }
     
-            WindowsFeature "RSAT-Hyper-V-Tools" {
-                Name      = "RSAT-Hyper-V-Tools"
-                Ensure    = "Present"
-                DependsOn = "[WindowsFeature]Hyper-V" 
-            }
+                WindowsFeature "RSAT-Hyper-V-Tools" {
+                    Name      = "RSAT-Hyper-V-Tools"
+                    Ensure    = "Present"
+                    DependsOn = "[WindowsFeature]Hyper-V" 
+                }
     
-            VMHost "ConfigureHyper-V" {
-                IsSingleInstance          = 'yes'
-                EnableEnhancedSessionMode = $true
-                DependsOn                 = "[WindowsFeature]Hyper-V"
-            }
-        }
-        else {
-            WindowsOptionalFeature "Hyper-V" {
-                Name   = "Microsoft-Hyper-V-All"
-                Ensure = "Enable"
-            }
-        }
-
-        #### Start Azure Local VHDx Creation ####
-
-        Script "CreateAzLocalDisk" {
-            GetScript  = {
-                $result = Test-Path -Path $Using:azLocalVhdPath
-                return @{ 'Result' = $result }
-            }
-
-            SetScript  = {
-                # Create Azure Local Host Image from ISO
-                
-                $scratchPath = "$Using:jumpstartPath\Scratch"
-                New-Item -ItemType Directory -Path "$scratchPath" -Force | Out-Null
-                
-                # Determine if any SSUs are available
-                $ssu = Test-Path -Path "$Using:ssuPath\*" -Include "*.msu"
-
-                if ($ssu) {
-                    Convert-WindowsImage -SourcePath $Using:azLocalISOLocalPath -SizeBytes 127GB -VHDPath $Using:azLocalVhdPath `
-                        -VHDFormat VHDX -VHDType Dynamic -VHDPartitionStyle GPT -Package $Using:ssuPath -TempDirectory $Using:scratchPath -Verbose
+                VMHost "ConfigureHyper-V" {
+                    IsSingleInstance          = 'yes'
+                    EnableEnhancedSessionMode = $true
+                    DependsOn                 = "[WindowsFeature]Hyper-V"
                 }
-                else {
-                    Convert-WindowsImage -SourcePath $Using:azLocalISOLocalPath -SizeBytes 127GB -VHDPath $Using:azLocalVhdPath `
-                        -VHDFormat VHDX -VHDType Dynamic -VHDPartitionStyle GPT -TempDirectory $Using:scratchPath -Verbose
+            }
+            else {
+                WindowsOptionalFeature "Hyper-V" {
+                    Name   = "Microsoft-Hyper-V-All"
+                    Ensure = "Enable"
                 }
-
-                Start-Sleep -Seconds 10
-
-                $mount = Mount-VHD -Path $Using:azLocalVhdPath -Passthru -ErrorAction Stop -Verbose
-                Start-Sleep -Seconds 2
-
-                $driveLetter = (Get-Disk -Number $mount.Number | Get-Partition | Where-Object Driveletter).DriveLetter
-                $updatepath = "$($driveLetter):\"
-                $updates = Get-ChildItem -path $Using:cuPath -Recurse | Where-Object { ($_.extension -eq ".msu") -or ($_.extension -eq ".cab") } | Select-Object fullname
-                foreach ($update in $updates) {
-                    Write-Host "Found the following update file to inject: $($update.fullname)"
-                    $command = "dism /image:" + $updatepath + " /add-package /packagepath:'" + $update.fullname + "'"
-                    Write-Host "Executing the following command: $command"
-                    Invoke-Expression $command
-                }
-
-                Write-Host "Cleaning up the image..."
-                $command = "dism /image:" + $updatepath + " /Cleanup-Image /spsuperseded"
-                Invoke-Expression $command
-
-                $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
-                if ($osInfo.ProductType -eq 1) {
-                    Write-Host "Enabling the Hyper-V role..."
-                    $command = "dism /image:" + $updatepath + " /enable-Feature:Microsoft-Hyper-V"
-                    Invoke-Expression $command
-                }
-
-                Write-Host "Dismounting the Virtual Disk..."
-                Dismount-VHD -path $Using:azLocalVhdPath -confirm:$false
-
-                Start-Sleep -Seconds 5
-
-                # Enable Hyper-V role on the Azure Local Host Image
-                $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
-                if ($osInfo.ProductType -eq 3) {
-                    Write-Host "Enabling the Hyper-V role..."
-                    Install-WindowsFeature -Vhd $Using:azLocalVhdPath -Name Hyper-V
-                }
-
-                # Remove the scratch folder
-                Remove-Item -Path "$scratchPath" -Recurse -Force | Out-Null
             }
 
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
-            }
-            DependsOn  = "[file]ParentDisks", "[Script]Download Azure Local ISO", "[Script]Download SSU", "[Script]Download CU"
-        }
+            #### Start Azure Local VHDx Creation ####
 
-        # Start MSLab Deployment
-        Script "MSLab Prereqs" {
-            GetScript  = {
-                $result = (Test-Path -Path "$Using:flagsPath\PreReqComplete.txt")
-                return @{ 'Result' = $result }
-            }
-
-            SetScript  = {
-                Set-Location "$Using:jumpstartPath"
-                .\1_Prereq.ps1
-                $preReqFlag = "$Using:flagsPath\PreReqComplete.txt"
-                New-Item $preReqFlag -ItemType file -Force
-            }
-
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
-            }
-            DependsOn  = "[Script]Replace LabConfig", "[Script]CreateAzLocalDisk"
-        }
-
-        Script "MSLab CreateParentDisks" {
-            GetScript  = {
-                $result = (Test-Path -Path "$Using:flagsPath\CreateDisksComplete.txt")
-                return @{ 'Result' = $result }
-            }
-
-            SetScript  = {
-                Set-Location "$Using:jumpstartPath"
-                .\2_CreateParentDisks.ps1
-                $parentDiskFlag = "$Using:flagsPath\CreateDisksComplete.txt"
-                New-Item $parentDiskFlag -ItemType file -Force
-            }
-
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
-            }
-            DependsOn  = "[Script]MSLab Prereqs"
-        }
-
-        Script "MSLab DeployEnvironment" {
-            GetScript  = {
-                $result = (Test-Path -Path "$Using:flagsPath\DeployComplete.txt")
-                return @{ 'Result' = $result }
-            }
-
-            SetScript  = {
-                Set-Location "$Using:jumpstartPath"
-                .\Deploy.ps1
-                $deployFlag = "$Using:flagsPath\DeployComplete.txt"
-                New-Item $deployFlag -ItemType file -Force
-                Write-Host "Sleeping for 2 minutes to allow for VMs to join domain and reboot as required"
-                Start-Sleep -Seconds 120
-            }
-
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
-            }
-            DependsOn  = "[Script]MSLab CreateParentDisks"
-        }
-
-        if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
-            $azureUsername = $($Admincreds.UserName)
-            $desktopPath = "C:\Users\$azureUsername\Desktop"
-            $rdpConfigPath = "$jumpstartPath\$vmPrefix-DC.rdp"
-        }
-        else {
-            $desktopPath = [Environment]::GetFolderPath("Desktop")
-            $rdpConfigPath = "$desktopPath\$vmPrefix-DC.rdp"
-        }
-
-        Script "Download RDP File" {
-            GetScript  = {
-                $result = Test-Path -Path "$Using:rdpConfigPath"
-                return @{ 'Result' = $result }
-            }
-
-            SetScript  = {
-                $ProgressPreference = 'SilentlyContinue'
-                Invoke-WebRequest -Uri "$Using:rdpConfigUri" -OutFile "$Using:rdpConfigPath" -UseBasicParsing
-            }
-
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
-            }
-            DependsOn  = "[Script]MSLab DeployEnvironment"
-        }
-
-        Script "Edit RDP file" {
-            GetScript  = {
-                $result = ((Get-Item $Using:rdpConfigPath).LastWriteTime -ge (Get-Date))
-                return @{ 'Result' = $result }
-            }
-
-            SetScript  = {
-                $vmIpAddress = (Get-VMNetworkAdapter -Name 'Internet' -VMName "$Using:vmPrefix-DC").IpAddresses | Where-Object { $_ -notmatch ':' }
-                $rdpConfigFile = Get-Content -Path "$Using:rdpConfigPath"
-                $rdpConfigFile = $rdpConfigFile.Replace("<<VM_IP_Address>>", $vmIpAddress)
-                Out-File -FilePath "$Using:rdpConfigPath" -InputObject $rdpConfigFile -Force
-            }
-
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
-            }
-            DependsOn  = "[Script]Download RDP File"
-        }
-
-        if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
-
-            Script "Create RDP RunOnce" {
+            Script "CreateAzLocalDisk" {
                 GetScript  = {
-                    $result = [bool] (Get-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name '!CopyRDPFile' -ErrorAction SilentlyContinue)
+                    $result = Test-Path -Path $Using:azLocalVhdPath
                     return @{ 'Result' = $result }
                 }
-    
+
                 SetScript  = {
-                    $command = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -command `"Copy-Item -Path `'$Using:rdpConfigPath`' -Destination `'$Using:desktopPath`' -Force`""
-                    Set-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name '!CopyRDPFile' `
-                        -Value $command
+                    # Create Azure Local Host Image from ISO
+                
+                    $scratchPath = "$Using:jumpstartPath\Scratch"
+                    New-Item -ItemType Directory -Path "$scratchPath" -Force | Out-Null
+                
+                    # Determine if any SSUs are available
+                    $ssu = Test-Path -Path "$Using:ssuPath\*" -Include "*.msu"
+
+                    if ($ssu) {
+                        Convert-WindowsImage -SourcePath $Using:azLocalISOLocalPath -SizeBytes 127GB -VHDPath $Using:azLocalVhdPath `
+                            -VHDFormat VHDX -VHDType Dynamic -VHDPartitionStyle GPT -Package $Using:ssuPath -TempDirectory $Using:scratchPath -Verbose
+                    }
+                    else {
+                        Convert-WindowsImage -SourcePath $Using:azLocalISOLocalPath -SizeBytes 127GB -VHDPath $Using:azLocalVhdPath `
+                            -VHDFormat VHDX -VHDType Dynamic -VHDPartitionStyle GPT -TempDirectory $Using:scratchPath -Verbose
+                    }
+
+                    Start-Sleep -Seconds 10
+
+                    $mount = Mount-VHD -Path $Using:azLocalVhdPath -Passthru -ErrorAction Stop -Verbose
+                    Start-Sleep -Seconds 2
+
+                    $driveLetter = (Get-Disk -Number $mount.Number | Get-Partition | Where-Object Driveletter).DriveLetter
+                    $updatepath = "$($driveLetter):\"
+                    $updates = Get-ChildItem -path $Using:cuPath -Recurse | Where-Object { ($_.extension -eq ".msu") -or ($_.extension -eq ".cab") } | Select-Object fullname
+                    foreach ($update in $updates) {
+                        Write-Host "Found the following update file to inject: $($update.fullname)"
+                        $command = "dism /image:" + $updatepath + " /add-package /packagepath:'" + $update.fullname + "'"
+                        Write-Host "Executing the following command: $command"
+                        Invoke-Expression $command
+                    }
+
+                    Write-Host "Cleaning up the image..."
+                    $command = "dism /image:" + $updatepath + " /Cleanup-Image /spsuperseded"
+                    Invoke-Expression $command
+
+                    $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
+                    if ($osInfo.ProductType -eq 1) {
+                        Write-Host "Enabling the Hyper-V role..."
+                        $command = "dism /image:" + $updatepath + " /enable-Feature:Microsoft-Hyper-V"
+                        Invoke-Expression $command
+                    }
+
+                    Write-Host "Dismounting the Virtual Disk..."
+                    Dismount-VHD -path $Using:azLocalVhdPath -confirm:$false
+
+                    Start-Sleep -Seconds 5
+
+                    # Enable Hyper-V role on the Azure Local Host Image
+                    $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
+                    if ($osInfo.ProductType -eq 3) {
+                        Write-Host "Enabling the Hyper-V role..."
+                        Install-WindowsFeature -Vhd $Using:azLocalVhdPath -Name Hyper-V
+                    }
+
+                    # Remove the scratch folder
+                    Remove-Item -Path "$scratchPath" -Recurse -Force | Out-Null
+                }
+
+                TestScript = {
+                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "[file]ParentDisks", "[Script]Download Azure Local ISO", "[Script]Download SSU", "[Script]Download CU"
+            }
+
+            # Start MSLab Deployment
+            Script "MSLab Prereqs" {
+                GetScript  = {
+                    $result = (Test-Path -Path "$Using:flagsPath\PreReqComplete.txt")
+                    return @{ 'Result' = $result }
+                }
+
+                SetScript  = {
+                    Set-Location "$Using:jumpstartPath"
+                    .\1_Prereq.ps1
+                    $preReqFlag = "$Using:flagsPath\PreReqComplete.txt"
+                    New-Item $preReqFlag -ItemType file -Force
+                }
+
+                TestScript = {
+                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "[Script]Replace LabConfig", "[Script]CreateAzLocalDisk"
+            }
+
+            Script "MSLab CreateParentDisks" {
+                GetScript  = {
+                    $result = (Test-Path -Path "$Using:flagsPath\CreateDisksComplete.txt")
+                    return @{ 'Result' = $result }
+                }
+
+                SetScript  = {
+                    Set-Location "$Using:jumpstartPath"
+                    .\2_CreateParentDisks.ps1
+                    $parentDiskFlag = "$Using:flagsPath\CreateDisksComplete.txt"
+                    New-Item $parentDiskFlag -ItemType file -Force
+                }
+
+                TestScript = {
+                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "[Script]MSLab Prereqs"
+            }
+
+            Script "MSLab DeployEnvironment" {
+                GetScript  = {
+                    $result = (Test-Path -Path "$Using:flagsPath\DeployComplete.txt")
+                    return @{ 'Result' = $result }
+                }
+
+                SetScript  = {
+                    Set-Location "$Using:jumpstartPath"
+                    .\Deploy.ps1
+                    $deployFlag = "$Using:flagsPath\DeployComplete.txt"
+                    New-Item $deployFlag -ItemType file -Force
+                    Write-Host "Sleeping for 2 minutes to allow for VMs to join domain and reboot as required"
+                    Start-Sleep -Seconds 120
+                }
+
+                TestScript = {
+                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "[Script]MSLab CreateParentDisks"
+            }
+
+            if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
+                $azureUsername = $($Admincreds.UserName)
+                $desktopPath = "C:\Users\$azureUsername\Desktop"
+                $rdpConfigPath = "$jumpstartPath\$vmPrefix-DC.rdp"
+            }
+            else {
+                $desktopPath = [Environment]::GetFolderPath("Desktop")
+                $rdpConfigPath = "$desktopPath\$vmPrefix-DC.rdp"
+            }
+
+            Script "Download RDP File" {
+                GetScript  = {
+                    $result = Test-Path -Path "$Using:rdpConfigPath"
+                    return @{ 'Result' = $result }
+                }
+
+                SetScript  = {
+                    $ProgressPreference = 'SilentlyContinue'
+                    Invoke-WebRequest -Uri "$Using:rdpConfigUri" -OutFile "$Using:rdpConfigPath" -UseBasicParsing
+                }
+
+                TestScript = {
+                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "[Script]MSLab DeployEnvironment"
+            }
+
+            Script "Edit RDP file" {
+                GetScript  = {
+                    $result = ((Get-Item $Using:rdpConfigPath).LastWriteTime -ge (Get-Date))
+                    return @{ 'Result' = $result }
+                }
+
+                SetScript  = {
+                    $vmIpAddress = (Get-VMNetworkAdapter -Name 'Internet' -VMName "$Using:vmPrefix-DC").IpAddresses | Where-Object { $_ -notmatch ':' }
+                    $rdpConfigFile = Get-Content -Path "$Using:rdpConfigPath"
+                    $rdpConfigFile = $rdpConfigFile.Replace("<<VM_IP_Address>>", $vmIpAddress)
+                    Out-File -FilePath "$Using:rdpConfigPath" -InputObject $rdpConfigFile -Force
+                }
+
+                TestScript = {
+                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "[Script]Download RDP File"
+            }
+
+            if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
+
+                Script "Create RDP RunOnce" {
+                    GetScript  = {
+                        $result = [bool] (Get-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name '!CopyRDPFile' -ErrorAction SilentlyContinue)
+                        return @{ 'Result' = $result }
+                    }
+    
+                    SetScript  = {
+                        $command = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -command `"Copy-Item -Path `'$Using:rdpConfigPath`' -Destination `'$Using:desktopPath`' -Force`""
+                        Set-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name '!CopyRDPFile' `
+                            -Value $command
+                    }
+
+                    TestScript = {
+                        # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                        $state = [scriptblock]::Create($GetScript).Invoke()
+                        return $state.Result
+                    }
+                    DependsOn  = "[Script]Edit RDP File"
+                }
+            }
+
+            Script "Enable RDP on DC" {
+                GetScript  = {
+                    $vmIpAddress = (Get-VMNetworkAdapter -Name 'Internet' -VMName "$Using:vmPrefix-DC").IpAddresses | Where-Object { $_ -notmatch ':' }
+                    if ((Test-NetConnection $vmIpAddress -CommonTCPPort rdp).TcpTestSucceeded -eq "True") {
+                        $result = $true
+                    }
+                    else {
+                        $result = $false
+                    }
+                    return @{ 'Result' = $result }
+                }
+
+                SetScript  = {
+                    Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $msLabCreds -ScriptBlock {
+                        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
+                        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+                        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+                    }
                 }
 
                 TestScript = {
@@ -777,120 +811,609 @@ configuration AzLWorkshop
                 }
                 DependsOn  = "[Script]Edit RDP File"
             }
-        }
-
-        Script "Enable RDP on DC" {
-            GetScript  = {
-                $vmIpAddress = (Get-VMNetworkAdapter -Name 'Internet' -VMName "$Using:vmPrefix-DC").IpAddresses | Where-Object { $_ -notmatch ':' }
-                if ((Test-NetConnection $vmIpAddress -CommonTCPPort rdp).TcpTestSucceeded -eq "True") {
-                    $result = $true
-                }
-                else {
-                    $result = $false
-                }
-                return @{ 'Result' = $result }
-            }
-
-            SetScript  = {
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $msLabCreds -ScriptBlock {
-                    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
-                    Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-                    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
-                }
-            }
-
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
-            }
-            DependsOn  = "[Script]Edit RDP File"
-        }
         
-        Script "Deploy WAC" {
-            GetScript  = {
-                Start-Sleep -Seconds 10
-                $result = Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $msLabCreds -ScriptBlock {
-                    [bool] (Get-WmiObject -class win32_product  | Where-Object { $_.Name -eq "Windows Admin Center" })
+            Script "Deploy WAC" {
+                GetScript  = {
+                    Start-Sleep -Seconds 10
+                    $result = Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $msLabCreds -ScriptBlock {
+                        [bool] (Get-WmiObject -class win32_product  | Where-Object { $_.Name -eq "Windows Admin Center" })
+                    }
+                    return @{ 'Result' = $result }
                 }
-                return @{ 'Result' = $result }
-            }
 
-            SetScript  = {
-                Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $msLabCreds -ScriptBlock {
-                    if (-not (Test-Path -Path "C:\WindowsAdminCenter.exe")) {
-                        $ProgressPreference = 'SilentlyContinue'
-                        Invoke-WebRequest -Uri 'https://aka.ms/WACDownload' -OutFile "C:\WindowsAdminCenter.exe" -UseBasicParsing
-                    }
-                    # Download PSexec
-                    if (-not (Test-Path -Path "C:\PStools.zip")) {
-                        $ProgressPreference = 'SilentlyContinue'
-                        Invoke-WebRequest -Uri 'https://download.sysinternals.com/files/PSTools.zip' -OutFile "C:\PStools.zip" -UseBasicParsing
-                        Expand-Archive -Path "C:\PStools.zip" -DestinationPath "C:\PStools" -Force
-                    }
-
-                    # Install WAC using PSexec
-                    if (-not (Get-WmiObject -class win32_product  | Where-Object { $_.Name -eq "Windows Admin Center" })) {
-                        Start-Process "C:\PStools\PsExec.exe" -ArgumentList "-accepteula -s -i -d C:\WindowsAdminCenter.exe /log=C:\WindowsAdminCenter.log /verysilent" -Wait
-                    }
-
-                    do {
-                        # Check if WindowsAdminCenter service is present and if not, wait for 10 seconds and check again
-                        while (-not (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue)) {
-                            Write-Output "Windows Admin Center not yet installed. Checking again in 10 seconds."
-                            Start-Sleep -Seconds 10
+                SetScript  = {
+                    Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $msLabCreds -ScriptBlock {
+                        if (-not (Test-Path -Path "C:\WindowsAdminCenter.exe")) {
+                            $ProgressPreference = 'SilentlyContinue'
+                            Invoke-WebRequest -Uri 'https://aka.ms/WACDownload' -OutFile "C:\WindowsAdminCenter.exe" -UseBasicParsing
                         }
+                        # Download PSexec
+                        if (-not (Test-Path -Path "C:\PStools.zip")) {
+                            $ProgressPreference = 'SilentlyContinue'
+                            Invoke-WebRequest -Uri 'https://download.sysinternals.com/files/PSTools.zip' -OutFile "C:\PStools.zip" -UseBasicParsing
+                            Expand-Archive -Path "C:\PStools.zip" -DestinationPath "C:\PStools" -Force
+                        }
+
+                        # Install WAC using PSexec
+                        if (-not (Get-WmiObject -class win32_product  | Where-Object { $_.Name -eq "Windows Admin Center" })) {
+                            Start-Process "C:\PStools\PsExec.exe" -ArgumentList "-accepteula -s -i -d C:\WindowsAdminCenter.exe /log=C:\WindowsAdminCenter.log /verysilent" -Wait
+                        }
+
+                        do {
+                            # Check if WindowsAdminCenter service is present and if not, wait for 10 seconds and check again
+                            while (-not (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue)) {
+                                Write-Output "Windows Admin Center not yet installed. Checking again in 10 seconds."
+                                Start-Sleep -Seconds 10
+                            }
                         
-                        if ((Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue).status -ne "Running") {
-                            Write-Output "Attempting to start Windows Admin Center (WindowsAdminCenter) Service - this may take a few minutes if the service has just been installed."
-                            Start-Service WindowsAdminCenter -ErrorAction SilentlyContinue
+                            if ((Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue).status -ne "Running") {
+                                Write-Output "Attempting to start Windows Admin Center (WindowsAdminCenter) Service - this may take a few minutes if the service has just been installed."
+                                Start-Service WindowsAdminCenter -ErrorAction SilentlyContinue
+                            }
+                            Start-sleep -Seconds 5
+                        } until ((Test-NetConnection -ErrorAction SilentlyContinue -ComputerName "localhost" -port 443).TcpTestSucceeded)
+                    }
+                }
+
+                TestScript = {
+                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "[Script]Enable RDP on DC"
+            }
+
+            Script "Update DC" {
+                GetScript  = {
+                    Start-Sleep -Seconds 10
+                    $result = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $msLabCreds -ScriptBlock {
+                        if (Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object subject -like "CN=WindowsAdminCenterSelfSigned") {
+                            return $true
                         }
-                        Start-sleep -Seconds 5
-                    } until ((Test-NetConnection -ErrorAction SilentlyContinue -ComputerName "localhost" -port 443).TcpTestSucceeded)
-                }
-            }
-
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
-            }
-            DependsOn  = "[Script]Enable RDP on DC"
-        }
-
-        Script "Update DC" {
-            GetScript  = {
-                Start-Sleep -Seconds 10
-                $result = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $msLabCreds -ScriptBlock {
-                    if (Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object subject -like "CN=WindowsAdminCenterSelfSigned") {
-                        return $true
+                        else {
+                            return $false
+                        }
                     }
-                    else {
-                        return $false
+                    return @{ 'Result' = $result }
+                }
+
+                SetScript  = {
+                    Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $msLabCreds -ScriptBlock {
+                        $GatewayServerName = "WAC"
+                        Start-Sleep 10
+                        Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/media/azlwallpaper.png' -OutFile "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -UseBasicParsing
+                        Set-GPPrefRegistryValue -Name "Default Domain Policy" -Context User -Action Replace -Key "HKCU\Control Panel\Desktop" -ValueName Wallpaper -Value "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -Type String
+                        $cert = Invoke-Command -ComputerName $GatewayServerName `
+                            -ScriptBlock { Get-ChildItem Cert:\LocalMachine\My\ | Where-Object subject -eq "CN=WindowsAdminCenterSelfSigned" }
+                        $cert | Export-Certificate -FilePath $env:TEMP\WACCert.cer
+                        Import-Certificate -FilePath $env:TEMP\WACCert.cer -CertStoreLocation Cert:\LocalMachine\Root\
                     }
                 }
-                return @{ 'Result' = $result }
+
+                TestScript = {
+                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "[Script]Deploy WAC"
             }
 
-            SetScript  = {
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $msLabCreds -ScriptBlock {
-                    $GatewayServerName = "WAC"
-                    Start-Sleep 10
-                    Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/media/azlwallpaper.png' -OutFile "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -UseBasicParsing
-                    Set-GPPrefRegistryValue -Name "Default Domain Policy" -Context User -Action Replace -Key "HKCU\Control Panel\Desktop" -ValueName Wallpaper -Value "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -Type String
-                    $cert = Invoke-Command -ComputerName $GatewayServerName `
-                        -ScriptBlock { Get-ChildItem Cert:\LocalMachine\My\ | Where-Object subject -eq "CN=WindowsAdminCenterSelfSigned" }
-                    $cert | Export-Certificate -FilePath $env:TEMP\WACCert.cer
-                    Import-Certificate -FilePath $env:TEMP\WACCert.cer -CertStoreLocation Cert:\LocalMachine\Root\
+            # Create the Host vSwitches to align with the desired azureLocalArchitecture
+            if ($azureLocalArchitecture -like "*Non-Converged") {
+                VMSwitch "CreateNonConvergedSwitch" {
+                    Name      = "Storage"
+                    Type      = "Private"
+                    Ensure    = "Present"
+                    DependsOn = "[Script]Update DC"
+                }
+                # For each VM with a name like "AzL", create 2 vNICs and attach them to the Storage vSwitch with VLANs 711-719
+                $vms = Get-VM | Where-Object Name -like "*AzL*"
+                foreach ($vm in $vms) {
+                    $nicNames = @("Storage1", "Storage2")
+                    foreach ($nicName in $nicNames) {
+                        VMNetworkAdapter "Create${nicName}NIC" {
+                            Id         = "($vm.Name)-${nicName}-NIC"
+                            VMName     = "$vm.Name"
+                            Name       = $nicName
+                            SwitchName = "Storage"
+                            Ensure     = "Present"
+                            DependsOn  = "[VMSwitch]CreateNonConvergedSwitch"
+                        }
+                    }
+                }
+                # Set the 711-719 VLAN IDs for the Storage vNICs and ensure in Trunk mode
+                Script "SetStorageVLANs" {
+                    GetScript  = {
+                        $result = $true
+                        return @{ 'Result' = $result }
+                    }
+                    SetScript  = {
+                        $vms = Get-VM | Where-Object Name -like "*AzL*"
+                        foreach ($vm in $vms) {
+                            $nics = Get-VMNetworkAdapter -VMName $vm.Name | Where-Object Name -like "Storage*"
+                            foreach ($nic in $nics) {
+                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Access -VlanId 0
+                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Trunk -AllowedVlanIdList 711-719
+                            }
+                        }
+                    }
+                    TestScript = {
+                        # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                        $state = [scriptblock]::Create($GetScript).Invoke()
+                        return $state.Result
+                    }
+                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1NIC", "[VMNetworkAdapter]CreateStorage2NIC")
                 }
             }
-
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
+            elseif ($azureLocalArchitecture -eq "2-Machine Switchless Dual-Link") {
+                # Create 2 private vSwitches named "Storage1" and "Storage2"
+                VMSwitch "CreateStorageSwitches" {
+                    Name      = @("Storage1-2", "Storage2-1")
+                    Type      = "Private"
+                    Ensure    = "Present"
+                    DependsOn = "[Script]Update DC"
+                }
+                # For each VM with a name like "AzL", create 2 vNICs and attach them to the Storage vSwitches
+                $vms = Get-VM | Where-Object Name -like "*AzL*"
+                foreach ($vm in $vms) {
+                    $nicNames = @("Storage1-2", "Storage2-1")
+                    foreach ($nicName in $nicNames) {
+                        VMNetworkAdapter "Create${nicName}NIC" {
+                            Id         = "($vm.Name)-${nicName}-NIC"
+                            VMName     = "$vm.Name"
+                            Name       = $nicName
+                            SwitchName = $nicName
+                            Ensure     = "Present"
+                            DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                        }
+                    }
+                }
+                # Set the 711-719 VLAN IDs for the Storage vNICs and ensure in Trunk mode
+                Script "SetStorageVLANs" {
+                    GetScript  = {
+                        $result = $true
+                        return @{ 'Result' = $result }
+                    }
+                    SetScript  = {
+                        $vms = Get-VM | Where-Object Name -like "*AzL*"
+                        foreach ($vm in $vms) {
+                            $nics = Get-VMNetworkAdapter -VMName $vm.Name | Where-Object Name -like "Storage*"
+                            foreach ($nic in $nics) {
+                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Access -VlanId 0
+                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Trunk -AllowedVlanIdList 711-719
+                            }
+                        }
+                    }
+                    TestScript = {
+                        # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                        $state = [scriptblock]::Create($GetScript).Invoke()
+                        return $state.Result
+                    }
+                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1NIC", "[VMNetworkAdapter]CreateStorage2NIC")
+                }
             }
-            DependsOn  = "[Script]Deploy WAC"
+            # Create vSwitch and vNICs for 3-machine switchless single-link architectures
+            elseif ($azureLocalArchitecture -eq "3-Machine Switchless Single-Link") {
+                # Create 1 vSwitch per VM named "Storage" plus the Number of the 2 nodes that it will connect between (e.g. Storage1-2)
+                VMSwitch "CreateStorageSwitches" {
+                    Name      = @("Storage1-2", "Storage2-3", "Storage1-3")
+                    Type      = "Private"
+                    Ensure    = "Present"
+                    DependsOn = "[Script]Update DC"
+                }
+                # Machine 1 should have 2 vNICs and connect to Storage1-2 and Storage1-3
+                VMNetworkAdapter "CreateStorage1-2NIC" {
+                    Id         = "($vmPrefix-AzL1)-Storage1-2-NIC"
+                    VMName     = "$vmPrefix-AzL1"
+                    Name       = "Storage1-2"
+                    SwitchName = "Storage1-2"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage1-3NIC" {
+                    Id         = "($vmPrefix-AzL1)-Storage1-3-NIC"
+                    VMName     = "$vmPrefix-AzL1"
+                    Name       = "Storage1-3"
+                    SwitchName = "Storage1-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                # Machine 2 should have 2 vNICs and connect to Storage1-2 and Storage2-3
+                VMNetworkAdapter "CreateStorage1-2NIC" {
+                    Id         = "($vmPrefix-AzL2)-Storage1-2-NIC"
+                    VMName     = "$vmPrefix-AzL2"
+                    Name       = "Storage1-2"
+                    SwitchName = "Storage1-2"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage2-3NIC" {
+                    Id         = "($vmPrefix-AzL2)-Storage2-3-NIC"
+                    VMName     = "$vmPrefix-AzL2"
+                    Name       = "Storage2-3"
+                    SwitchName = "Storage2-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                # Machine 3 should have 2 vNICs and connect to Storage1-3 and Storage2-3
+                VMNetworkAdapter "CreateStorage1-3NIC" {
+                    Id         = "($vmPrefix-AzL3)-Storage1-3-NIC"
+                    VMName     = "$vmPrefix-AzL3"
+                    Name       = "Storage1-3"
+                    SwitchName = "Storage1-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage2-3NIC" {
+                    Id         = "($vmPrefix-AzL3)-Storage2-3-NIC"
+                    VMName     = "$vmPrefix-AzL3"
+                    Name       = "Storage2-3"
+                    SwitchName = "Storage2-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+            }
+            # Create vSwitch and vNICs for 3-machine switchless dual-link architectures
+            elseif ($azureLocalArchitecture -like "3-Machine Switchless Dual-Link") {
+                # Create 6 private vSwitches named "Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2", "Storage1-3", and "Storage3-1"
+                VMSwitch "CreateStorageSwitches" {
+                    Name      = @("Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2", "Storage1-3", "Storage3-1")
+                    Type      = "Private"
+                    Ensure    = "Present"
+                    DependsOn = "[Script]Update DC"
+                }
+                # Machine 1 should have 4 vNICs and connect to Storage1-2, Storage1-3, Storage2-1, and Storage3-1
+                VMNetworkAdapter "CreateStorage1-2NIC" {
+                    Id         = "($vmPrefix-AzL1)-Storage1-2-NIC"
+                    VMName     = "$vmPrefix-AzL1"
+                    Name       = "Storage1-2"
+                    SwitchName = "Storage1-2"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage1-3NIC" {
+                    Id         = "($vmPrefix-AzL1)-Storage1-3-NIC"
+                    VMName     = "$vmPrefix-AzL1"
+                    Name       = "Storage1-3"
+                    SwitchName = "Storage1-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage2-1NIC" {
+                    Id         = "($vmPrefix-AzL1)-Storage2-1-NIC"
+                    VMName     = "$vmPrefix-AzL1"
+                    Name       = "Storage2-1"
+                    SwitchName = "Storage2-1"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage3-1NIC" {
+                    Id         = "($vmPrefix-AzL1)-Storage3-1-NIC"
+                    VMName     = "$vmPrefix-AzL1"
+                    Name       = "Storage3-1"
+                    SwitchName = "Storage3-1"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                # Machine 2 should have 4 vNICs and connect to Storage1-2, Storage2-1, Storage2-3, and Storage3-2
+                VMNetworkAdapter "CreateStorage1-2NIC" {
+                    Id         = "($vmPrefix-AzL2)-Storage1-2-NIC"
+                    VMName     = "$vmPrefix-AzL2"
+                    Name       = "Storage1-2"
+                    SwitchName = "Storage1-2"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage2-1NIC" {
+                    Id         = "($vmPrefix-AzL2)-Storage2-1-NIC"
+                    VMName     = "$vmPrefix-AzL2"
+                    Name       = "Storage2-1"
+                    SwitchName = "Storage2-1"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage2-3NIC" {
+                    Id         = "($vmPrefix-AzL2)-Storage2-3-NIC"
+                    VMName     = "$vmPrefix-AzL2"
+                    Name       = "Storage2-3"
+                    SwitchName = "Storage2-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage3-2NIC" {
+                    Id         = "($vmPrefix-AzL2)-Storage3-2-NIC"
+                    VMName     = "$vmPrefix-AzL2"
+                    Name       = "Storage3-2"
+                    SwitchName = "Storage3-2"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                # Machine 3 should have 4 vNICs and connect to Storage1-3, Storage2-3, Storage3-1, and Storage3-2
+                VMNetworkAdapter "CreateStorage1-3NIC" {
+                    Id         = "($vmPrefix-AzL3)-Storage1-3-NIC"
+                    VMName     = "$vmPrefix-AzL3"
+                    Name       = "Storage1-3"
+                    SwitchName = "Storage1-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage2-3NIC" {
+                    Id         = "($vmPrefix-AzL3)-Storage2-3-NIC"
+                    VMName     = "$vmPrefix-AzL3"
+                    Name       = "Storage2-3"
+                    SwitchName = "Storage2-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage3-1NIC" {
+                    Id         = "($vmPrefix-AzL3)-Storage3-1-NIC"
+                    VMName     = "$vmPrefix-AzL3"
+                    Name       = "Storage3-1"
+                    SwitchName = "Storage3-1"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage3-2NIC" {
+                    Id         = "($vmPrefix-AzL3)-Storage3-2-NIC"
+                    VMName     = "$vmPrefix-AzL3"
+                    Name       = "Storage3-2"
+                    SwitchName = "Storage3-2"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+            }
+            # Set the 711-719 VLAN IDs for the Storage vNICs and ensure in Trunk mode
+            Script "SetStorageVLANs" {
+                GetScript  = {
+                    $result = $true
+                    return @{ 'Result' = $result }
+                }
+                SetScript  = {
+                    $vms = Get-VM | Where-Object Name -like "*AzL*"
+                    foreach ($vm in $vms) {
+                        $nics = Get-VMNetworkAdapter -VMName $vm.Name | Where-Object Name -like "Storage*"
+                        foreach ($nic in $nics) {
+                            Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Access -VlanId 0
+                            Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Trunk -AllowedVlanIdList 711-719
+                        }
+                    }
+                }
+                TestScript = {
+                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = @("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC")
+            }
+            # Create vSwitch and vNICs for 4-machine switchless dual-link architectures
+            elseif ($azureLocalArchitecture -like "4-Machine Switchless Dual-Link") {
+                # Create 12 private vSwitches named "Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2", "Storage1-3", "Storage3-1", "Storage1-4", "Storage4-1", "Storage2-4", "Storage4-2", "Storage3-4", and "Storage4-3"
+                VMSwitch "CreateStorageSwitches" {
+                    Name      = @("Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2", "Storage1-3", "Storage3-1", "Storage1-4", "Storage4-1", "Storage2-4", "Storage4-2", "Storage3-4", "Storage4-3")
+                    Type      = "Private"
+                    Ensure    = "Present"
+                    DependsOn = "[Script]Update DC"
+                }
+                # Machine 1 should have 6 vNICs and connect to Storage1-2, Storage1-3, Storage1-4, Storage2-1, Storage3-1, and Storage4-1
+                VMNetworkAdapter "CreateStorage1-2NIC" {
+                    Id         = "($vmPrefix-AzL1)-Storage1-2-NIC"
+                    VMName     = "$vmPrefix-AzL1"
+                    Name       = "Storage1-2"
+                    SwitchName = "Storage1-2"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage1-3NIC" {
+                    Id         = "($vmPrefix-AzL1)-Storage1-3-NIC"
+                    VMName     = "$vmPrefix-AzL1"
+                    Name       = "Storage1-3"
+                    SwitchName = "Storage1-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage1-4NIC" {
+                    Id         = "($vmPrefix-AzL1)-Storage1-4-NIC"
+                    VMName     = "$vmPrefix-AzL1"
+                    Name       = "Storage1-4"
+                    SwitchName = "Storage1-4"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage2-1NIC" {
+                    Id         = "($vmPrefix-AzL1)-Storage2-1-NIC"
+                    VMName     = "$vmPrefix-AzL1"
+                    Name       = "Storage2-1"
+                    SwitchName = "Storage2-1"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage3-1NIC" {
+                    Id         = "($vmPrefix-AzL1)-Storage3-1-NIC"
+                    VMName     = "$vmPrefix-AzL1"
+                    Name       = "Storage3-1"
+                    SwitchName = "Storage3-1"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage4-1NIC" {
+                    Id         = "($vmPrefix-AzL1)-Storage4-1-NIC"
+                    VMName     = "$vmPrefix-AzL1"
+                    Name       = "Storage4-1"
+                    SwitchName = "Storage4-1"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                # Machine 2 should have 6 vNICs and connect to Storage1-2, Storage2-1, Storage2-3, Storage2-4, Storage3-2, and Storage4-2
+                VMNetworkAdapter "CreateStorage1-2NIC" {
+                    Id         = "($vmPrefix-AzL2)-Storage1-2-NIC"
+                    VMName     = "$vmPrefix-AzL2"
+                    Name       = "Storage1-2"
+                    SwitchName = "Storage1-2"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage2-1NIC" {
+                    Id         = "($vmPrefix-AzL2)-Storage2-1-NIC"
+                    VMName     = "$vmPrefix-AzL2"
+                    Name       = "Storage2-1"
+                    SwitchName = "Storage2-1"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage2-3NIC" {
+                    Id         = "($vmPrefix-AzL2)-Storage2-3-NIC"
+                    VMName     = "$vmPrefix-AzL2"
+                    Name       = "Storage2-3"
+                    SwitchName = "Storage2-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage2-4NIC" {
+                    Id         = "($vmPrefix-AzL2)-Storage2-4-NIC"
+                    VMName     = "$vmPrefix-AzL2"
+                    Name       = "Storage2-4"
+                    SwitchName = "Storage2-4"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage3-2NIC" {
+                    Id         = "($vmPrefix-AzL2)-Storage3-2-NIC"
+                    VMName     = "$vmPrefix-AzL2"
+                    Name       = "Storage3-2"
+                    SwitchName = "Storage3-2"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage4-2NIC" {
+                    Id         = "($vmPrefix-AzL2)-Storage4-2-NIC"
+                    VMName     = "$vmPrefix-AzL2"
+                    Name       = "Storage4-2"
+                    SwitchName = "Storage4-2"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                # Machine 3 should have 6 vNICs and connect to Storage1-3, Storage2-3, Storage3-1, Storage3-4, Storage4-1, and Storage4-3
+                VMNetworkAdapter "CreateStorage1-3NIC" {
+                    Id         = "($vmPrefix-AzL3)-Storage1-3-NIC"
+                    VMName     = "$vmPrefix-AzL3"
+                    Name       = "Storage1-3"
+                    SwitchName = "Storage1-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage2-3NIC" {
+                    Id         = "($vmPrefix-AzL3)-Storage2-3-NIC"
+                    VMName     = "$vmPrefix-AzL3"
+                    Name       = "Storage2-3"
+                    SwitchName = "Storage2-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage3-1NIC" {
+                    Id         = "($vmPrefix-AzL3)-Storage3-1-NIC"
+                    VMName     = "$vmPrefix-AzL3"
+                    Name       = "Storage3-1"
+                    SwitchName = "Storage3-1"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage3-4NIC" {
+                    Id         = "($vmPrefix-AzL3)-Storage3-4-NIC"
+                    VMName     = "$vmPrefix-AzL3"
+                    Name       = "Storage3-4"
+                    SwitchName = "Storage3-4"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage4-1NIC" {
+                    Id         = "($vmPrefix-AzL3)-Storage4-1-NIC"
+                    VMName     = "$vmPrefix-AzL3"
+                    Name       = "Storage4-1"
+                    SwitchName = "Storage4-1"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage4-3NIC" {
+                    Id         = "($vmPrefix-AzL3)-Storage4-3-NIC"
+                    VMName     = "$vmPrefix-AzL3"
+                    Name       = "Storage4-3"
+                    SwitchName = "Storage4-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                # Machine 4 should have 6 vNICs and connect to Storage1-4, Storage2-4, Storage3-4, Storage4-1, Storage4-2, and Storage4-3
+                VMNetworkAdapter "CreateStorage1-4NIC" {
+                    Id         = "($vmPrefix-AzL4)-Storage1-4-NIC"
+                    VMName     = "$vmPrefix-AzL4"
+                    Name       = "Storage1-4"
+                    SwitchName = "Storage1-4"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage2-4NIC" {
+                    Id         = "($vmPrefix-AzL4)-Storage2-4-NIC"
+                    VMName     = "$vmPrefix-AzL4"
+                    Name       = "Storage2-4"
+                    SwitchName = "Storage2-4"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage3-4NIC" {
+                    Id         = "($vmPrefix-AzL4)-Storage3-4-NIC"
+                    VMName     = "$vmPrefix-AzL4"
+                    Name       = "Storage3-4"
+                    SwitchName = "Storage3-4"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage4-1NIC" {
+                    Id         = "($vmPrefix-AzL4)-Storage4-1-NIC"
+                    VMName     = "$vmPrefix-AzL4"
+                    Name       = "Storage4-1"
+                    SwitchName = "Storage4-1"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage4-2NIC" {
+                    Id         = "($vmPrefix-AzL4)-Storage4-2-NIC"
+                    VMName     = "$vmPrefix-AzL4"
+                    Name       = "Storage4-2"
+                    SwitchName = "Storage4-2"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+                VMNetworkAdapter "CreateStorage4-3NIC" {
+                    Id         = "($vmPrefix-AzL4)-Storage4-3-NIC"
+                    VMName     = "$vmPrefix-AzL4"
+                    Name       = "Storage4-3"
+                    SwitchName = "Storage4-3"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                }
+            }
+            # Set the 711-719 VLAN IDs for the Storage vNICs and ensure in Trunk mode
+            Script "SetStorageVLANs" {
+                GetScript  = {
+                    $result = $true
+                    return @{ 'Result' = $result }
+                }
+                SetScript  = {
+                    $vms = Get-VM | Where-Object Name -like "*AzL*"
+                    foreach ($vm in $vms) {
+                        $nics = Get-VMNetworkAdapter -VMName $vm.Name | Where-Object Name -like "Storage*"
+                        foreach ($nic in $nics) {
+                            Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Access -VlanId 0
+                            Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Trunk -AllowedVlanIdList 711-719
+                        }
+                    }
+                }
+                TestScript = {
+                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = @("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage1-4NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage2-4NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC", "[VMNetworkAdapter]CreateStorage3-4NIC", "[VMNetworkAdapter]CreateStorage4-1NIC", "[VMNetworkAdapter]CreateStorage4-2NIC", "[VMNetworkAdapter]CreateStorage4-3NIC")
+            }
         }
     }
 }
