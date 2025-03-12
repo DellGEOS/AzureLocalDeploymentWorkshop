@@ -52,8 +52,7 @@ configuration AzLWorkshop
             $customRdpPort = 3389
         }
 
-        $dateStamp = Get-Date -UFormat %d%b%y
-        $vmPrefix = "AzLWorkshop-$dateStamp"
+        $vmPrefix = (Get-Date -UFormat %d%b%y).ToUpper()
 
         # Calculate the number of Azure Local machines required
         $azureLocalMachines = if ($azureLocalArchitecture -eq "Single Machine") { 1 } else { [INT]$azureLocalArchitecture.Substring(0, 1) }
@@ -1024,6 +1023,14 @@ configuration AzLWorkshop
                     }
                 }
             }
+            $dependsOn = switch ($azureLocalArchitecture) {
+                { $_ -like "*Non-Converged" } { '@("[VMNetworkAdapter]CreateStorage1NIC", "[VMNetworkAdapter]CreateStorage2NIC")' }
+                "2-Machine Switchless Dual-Link" { '@("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage2-1NIC")' }
+                "3-Machine Switchless Single-Link" { '@("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-3NIC")' }
+                "3-Machine Switchless Dual-Link" { '@("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC")' }
+                "4-Machine Switchless Dual-Link" { '@("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage1-4NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage2-4NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC", "[VMNetworkAdapter]CreateStorage3-4NIC", "[VMNetworkAdapter]CreateStorage4-1NIC", "[VMNetworkAdapter]CreateStorage4-2NIC", "[VMNetworkAdapter]CreateStorage4-3NIC")' }
+            }
+
             Script "SetStorageVLANs" {
                 GetScript  = {
                     $result = $true
@@ -1044,22 +1051,7 @@ configuration AzLWorkshop
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
-                # Select the appropriate DependsOn based on the architecture
-                if ($azureLocalArchitecture -like "*Non-Converged") {
-                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1NIC", "[VMNetworkAdapter]CreateStorage2NIC")
-                }
-                elseif ($azureLocalArchitecture -eq "2-Machine Switchless Dual-Link") {
-                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage2-1NIC")
-                }
-                elseif ($azureLocalArchitecture -eq "3-Machine Switchless Single-Link") {
-                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-3NIC")
-                }
-                elseif ($azureLocalArchitecture -eq "3-Machine Switchless Dual-Link") {
-                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC")
-                }
-                elseif ($azureLocalArchitecture -eq "4-Machine Switchless Dual-Link") {
-                    DependsOn  = @("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage1-4NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage2-4NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC", "[VMNetworkAdapter]CreateStorage3-4NIC", "[VMNetworkAdapter]CreateStorage4-1NIC", "[VMNetworkAdapter]CreateStorage4-2NIC", "[VMNetworkAdapter]CreateStorage4-3NIC")
-                }
+                DependsOn  = $dependsOn
             }
         }
     }
