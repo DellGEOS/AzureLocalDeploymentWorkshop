@@ -97,6 +97,7 @@ configuration AzLWorkshop
         $azLocalVhdPath = "$parentDiskPath\AzL_G2.vhdx"
 
         $domainNetBios = $domainName.Split('.')[0]
+        $domainAdminName = $Admincreds.UserName
         $msLabUsername = "$domainNetBios\$($Admincreds.UserName)"
         $msLabPassword = $Admincreds.GetNetworkCredential().Password
         $secMsLabPassword = New-Object -TypeName System.Security.SecureString
@@ -314,7 +315,7 @@ configuration AzLWorkshop
 
             SetScript  = {
                 $labConfigFile = Get-Content -Path "$Using:labConfigPath"
-                $labConfigFile = $labConfigFile.Replace("<<DomainAdminName>>", $Using:msLabUsername)
+                $labConfigFile = $labConfigFile.Replace("<<DomainAdminName>>", $Using:domainAdminName)
                 $labConfigFile = $labConfigFile.Replace("<<AdminPassword>>", $Using:msLabPassword)
                 $labConfigFile = $labConfigFile.Replace("<<DomainNetBios>>", $Using:domainNetBios)
                 $labConfigFile = $labConfigFile.Replace("<<DomainName>>", $Using:domainName)
