@@ -318,6 +318,7 @@ configuration AzLWorkshop
                 $labConfigFile = $labConfigFile.Replace("<<AdminPassword>>", $Using:msLabPassword)
                 $labConfigFile = $labConfigFile.Replace("<<DomainNetBios>>", $Using:domainNetBios)
                 $labConfigFile = $labConfigFile.Replace("<<DomainName>>", $Using:domainName)
+                $labConfigFile = $labConfigFile.Replace("<<azureLocalMachines>>", $Using:azureLocalMachines)
                 $labConfigFile = $labConfigFile.Replace("<<azureLocalMachineMemory>>", $Using:azureLocalMachineMemory)
                 $labConfigFile = $labConfigFile.Replace("<<WSServerIsoPath>>", $Using:wsISOLocalPath)
                 $labConfigFile = $labConfigFile.Replace("<<MsuFolder>>", $Using:updatePath)
