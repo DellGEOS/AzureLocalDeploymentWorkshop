@@ -656,7 +656,7 @@ configuration AzLWorkshop
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
-            DependsOn  = "[Script]Replace LabConfig", "[Script]CreateAzLocalDisk"
+            DependsOn  = "[Script]Edit LabConfig", "[Script]CreateAzLocalDisk"
         }
 
         Script "MSLab CreateParentDisks" {
