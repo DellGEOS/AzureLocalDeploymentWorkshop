@@ -564,7 +564,7 @@ configuration AzLWorkshop
 
         Script "CreateAzLocalDisk" {
             GetScript  = {
-                $result = Test-Path -Path $Using:azLocalVhdPath
+                $result = Test-Path -Path $Using:azLocalVhdPath -and Test-Path -Path "$Using:flagsPath\AzLVhdComplete.txt"
                 return @{ 'Result' = $result }
             }
 
@@ -626,6 +626,8 @@ configuration AzLWorkshop
 
                 # Remove the scratch folder
                 Remove-Item -Path "$scratchPath" -Recurse -Force | Out-Null
+                $AzLVhdFlag = "$Using:flagsPath\AzLVhdComplete.txt"
+                New-Item $AzLVhdFlag -ItemType file -Force
             }
 
             TestScript = {
