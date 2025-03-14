@@ -791,7 +791,7 @@ configuration AzLWorkshop
             }
 
             SetScript  = {
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $msLabCreds -ScriptBlock {
+                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $Using:msLabCreds -ScriptBlock {
                     Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
                     Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
                     Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
@@ -809,14 +809,14 @@ configuration AzLWorkshop
         Script "Deploy WAC" {
             GetScript  = {
                 Start-Sleep -Seconds 10
-                $result = Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $msLabCreds -ScriptBlock {
+                $result = Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $Using:msLabCreds -ScriptBlock {
                     [bool] (Get-WmiObject -class win32_product  | Where-Object { $_.Name -eq "Windows Admin Center" })
                 }
                 return @{ 'Result' = $result }
             }
 
             SetScript  = {
-                Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $msLabCreds -ScriptBlock {
+                Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $Using:msLabCreds -ScriptBlock {
                     if (-not (Test-Path -Path "C:\WindowsAdminCenter.exe")) {
                         $ProgressPreference = 'SilentlyContinue'
                         Invoke-WebRequest -Uri 'https://aka.ms/WACDownload' -OutFile "C:\WindowsAdminCenter.exe" -UseBasicParsing
@@ -860,7 +860,7 @@ configuration AzLWorkshop
         Script "Update DC" {
             GetScript  = {
                 Start-Sleep -Seconds 10
-                $result = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $msLabCreds -ScriptBlock {
+                $result = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $Using:msLabCreds -ScriptBlock {
                     if (Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object subject -like "CN=WindowsAdminCenterSelfSigned") {
                         return $true
                     }
@@ -872,7 +872,7 @@ configuration AzLWorkshop
             }
 
             SetScript  = {
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $msLabCreds -ScriptBlock {
+                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $Using:msLabCreds -ScriptBlock {
                     $GatewayServerName = "WAC"
                     Start-Sleep 10
                     Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/media/azlwallpaper.png' -OutFile "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -UseBasicParsing
