@@ -951,8 +951,8 @@ configuration AzLWorkshop
 
             foreach ($machine in $machines) {
                 foreach ($nic in $nics[$machine - 1].NICs) {
-                    VMNetworkAdapter "$($vm)$($nic)" {
-                        Id         = "(AzL$machine)-$nic-NIC"
+                    VMNetworkAdapter "AzL$machine$($nic)" {
+                        Id         = "AzL$machine-$nic-NIC"
                         VMName     = "$vmPrefix-AzL$machine"
                         Name       = $nic
                         SwitchName = $nic
@@ -1015,8 +1015,8 @@ configuration AzLWorkshop
 
             foreach ($machine in $machineNics) {
                 foreach ($nicName in $machine.NICs) {
-                    VMNetworkAdapter "$($vm)$($nicName)" {
-                        Id         = "($vmPrefix-AzL$($machine.VM))-$nicName-NIC"
+                    VMNetworkAdapter "AzL$($machine.VM)$($nicName)" {
+                        Id         = "$vmPrefix-AzL$($machine.VM)-$nicName-NIC"
                         VMName     = "$vmPrefix-AzL$($machine.VM)"
                         Name       = $nicName
                         SwitchName = $nicName
@@ -1122,7 +1122,7 @@ configuration AzLWorkshop
 
             foreach ($machine in $machineNics) {
                 foreach ($nicName in $machine.NICs) {
-                    VMNetworkAdapter "$($vm)$($nicName)" {
+                    VMNetworkAdapter "AzL$($machine.VM)$($nicName)" {
                         Id         = "$vmPrefix-AzL$($machine.VM)-$nicName-NIC"
                         VMName     = "$vmPrefix-AzL$($machine.VM)"
                         Name       = $nicName
@@ -1169,8 +1169,6 @@ configuration AzLWorkshop
             }
         }
 
-        $vLANdependsOnString = ($vLANdependsOn | ForEach-Object { "`"$_`"" }) -join ", "
-
         # Perform the SetStorageVLANs script based on the $azureLocalArchitecture
         # Not necessary if $azureLocalArchitecture is either 'Single Machine' or '*Fully-Converged'
 
@@ -1203,7 +1201,7 @@ configuration AzLWorkshop
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
-                DependsOn  = @("[Script]Update DC", $vLANdependsOnString)
+                DependsOn  = "[Script]Update DC", $vLANdependsOn
             }
         }
 

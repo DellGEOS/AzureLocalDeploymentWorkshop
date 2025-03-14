@@ -408,7 +408,7 @@ try {
 
     AzLWorkshop -workshopPath $workshopPath -azureLocalArchitecture $azureLocalArchitecture -adminCreds $adminCreds -domainName $domainName `
         -azureLocalMachineMemory $azureLocalMachineMemory -telemetryLevel $telemetryLevel -updateImages $updateImages `
-        -WindowsServerIsoPath $WindowsServerIsoPath -AzureLocalIsoPath $AzureLocalIsoPath -customDNSForwarders $customDNSForwarders
+        -WindowsServerIsoPath $WindowsServerIsoPath -AzureLocalIsoPath $AzureLocalIsoPath -customDNSForwarders $customDNSForwarders -Verbose
 
     Write-Host "Checking if required Hyper-V role and platform is installed before deployment..."
     $hypervRoleState = ((Get-WindowsOptionalFeature -Online -FeatureName *Microsoft-Hyper-V*) | Where-Object { $_.State -eq "Disabled" })
