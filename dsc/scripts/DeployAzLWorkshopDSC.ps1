@@ -463,9 +463,9 @@ try {
     $Secs = $sw.Elapsed.Seconds
     $difference = '{0:00}h:{1:00}m:{2:00}s' -f $Hrs, $Mins, $Secs
 
-    Write-Host "Hybrid Jumpstart deployment completed successfully, taking $difference." -ErrorAction SilentlyContinue
-    Write-Host "You started the Hybrid Jumpstart deployment at $startTime." -ErrorAction SilentlyContinue
-    Write-Host "Hybrid Jumpstart deployment completed at $endTime." -ErrorAction SilentlyContinue
+    Write-Host "Azure Local workshop deployment completed successfully, taking $difference." -ErrorAction SilentlyContinue
+    Write-Host "You started the Azure Local workshop deployment at $startTime." -ErrorAction SilentlyContinue
+    Write-Host "Azure Local workshop deployment completed at $endTime." -ErrorAction SilentlyContinue
 }
 catch {
     Set-Location $PSScriptRoot
