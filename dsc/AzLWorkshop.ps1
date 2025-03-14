@@ -982,11 +982,11 @@ configuration AzLWorkshop
 
         # Set VLANs for the Storage vNICs based on the azureLocalArchitecture
         $vLANdependsOn = switch ($azureLocalArchitecture) {
-            { $_ -like "*Non-Converged" } { '@("[VMNetworkAdapter]CreateStorage1NIC", "[VMNetworkAdapter]CreateStorage2NIC")' }
-            "2-Machine Switchless Dual-Link" { '@("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage2-1NIC")' }
-            "3-Machine Switchless Single-Link" { '@("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-3NIC")' }
-            "3-Machine Switchless Dual-Link" { '@("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC")' }
-            "4-Machine Switchless Dual-Link" { '@("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage1-4NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage2-4NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC", "[VMNetworkAdapter]CreateStorage3-4NIC", "[VMNetworkAdapter]CreateStorage4-1NIC", "[VMNetworkAdapter]CreateStorage4-2NIC", "[VMNetworkAdapter]CreateStorage4-3NIC")' }
+            { $_ -like "*Non-Converged" } { '"[VMNetworkAdapter]CreateStorage1NIC", "[VMNetworkAdapter]CreateStorage2NIC"' }
+            "2-Machine Switchless Dual-Link" { '"[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage2-1NIC")' }
+            "3-Machine Switchless Single-Link" { '"[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-3NIC")' }
+            "3-Machine Switchless Dual-Link" { '"[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC")' }
+            "4-Machine Switchless Dual-Link" { '"[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage1-4NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage2-4NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC", "[VMNetworkAdapter]CreateStorage3-4NIC", "[VMNetworkAdapter]CreateStorage4-1NIC", "[VMNetworkAdapter]CreateStorage4-2NIC", "[VMNetworkAdapter]CreateStorage4-3NIC")' }
         }
 
         Script "SetStorageVLANs" {
