@@ -845,6 +845,16 @@ configuration AzLWorkshop
             DependsOn  = "[Script]Deploy WAC"
         }
 
+        # Create a switch statement to populate the $vms paremeter based on the the $azureLocalMachines number. $vms should be an array of strings containing the names of the VMs that will be created.
+        # The VM name that is used during the deployment is based on the $vmPrefix variable, which is set in the labconfig file and should only include the AzL VMs and not include the DC or WAC VMs.
+        # The range of $azureLocalMachines is 1-4
+        switch ($azureLocalMachines) {
+            1 { $vms = @("$vmPrefix-AzL1") }
+            2 { $vms = @("$vmPrefix-AzL1", "$vmPrefix-AzL2") }
+            3 { $vms = @("$vmPrefix-AzL1", "$vmPrefix-AzL2", "$vmPrefix-AzL3") }
+            4 { $vms = @("$vmPrefix-AzL1", "$vmPrefix-AzL2", "$vmPrefix-AzL3", "$vmPrefix-AzL4") }
+        }
+
         # Create the Host vSwitches and vNICs to align with the desired azureLocalArchitecture
         if ($azureLocalArchitecture -like "*Non-Converged") {
             VMSwitch "CreateNonConvergedSwitch" {
@@ -854,13 +864,12 @@ configuration AzLWorkshop
                 DependsOn = "[Script]Update DC"
             }
             # For each VM with a name like "AzL", create 2 vNICs and attach them to the Storage vSwitch with VLANs 711-719
-            $vms = Get-VM | Where-Object Name -like "*AzL*"
-            foreach ($vm in $vms) {
+            foreach ($vm in $Using:vms) {
                 $nicNames = @("Storage1", "Storage2")
                 foreach ($nicName in $nicNames) {
                     VMNetworkAdapter "Create${nicName}NIC" {
-                        Id         = "($vm.Name)-${nicName}-NIC"
-                        VMName     = "$vm.Name"
+                        Id         = "$vm-${nicName}-NIC"
+                        VMName     = "$vm"
                         Name       = $nicName
                         SwitchName = "Storage"
                         Ensure     = "Present"
@@ -878,13 +887,12 @@ configuration AzLWorkshop
                 DependsOn = "[Script]Update DC"
             }
             # For each VM with a name like "AzL", create 2 vNICs and attach them to the Storage vSwitches
-            $vms = Get-VM | Where-Object Name -like "*AzL*"
-            foreach ($vm in $vms) {
+            foreach ($vm in $Using:vms) {
                 $nicNames = @("Storage1-2", "Storage2-1")
                 foreach ($nicName in $nicNames) {
                     VMNetworkAdapter "Create${nicName}NIC" {
-                        Id         = "($vm.Name)-${nicName}-NIC"
-                        VMName     = "$vm.Name"
+                        Id         = "$vm-${nicName}-NIC"
+                        VMName     = "$vm"
                         Name       = $nicName
                         SwitchName = $nicName
                         Ensure     = "Present"
@@ -995,12 +1003,11 @@ configuration AzLWorkshop
                 return @{ 'Result' = $result }
             }
             SetScript  = {
-                $vms = Get-VM | Where-Object Name -like "*AzL*"
-                foreach ($vm in $vms) {
-                    $nics = Get-VMNetworkAdapter -VMName $vm.Name | Where-Object Name -like "Storage*"
+                foreach ($vm in $Using:vms) {
+                    $nics = Get-VMNetworkAdapter -VMName $vm | Where-Object Name -like "Storage*"
                     foreach ($nic in $nics) {
-                        Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Access -VlanId 0
-                        Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm.Name -Trunk -AllowedVlanIdList 711-719
+                        Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm -Access -VlanId 0
+                        Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm -Trunk -AllowedVlanIdList 711-719
                     }
                 }
             }
