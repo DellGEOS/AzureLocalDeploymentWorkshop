@@ -848,6 +848,7 @@ configuration AzLWorkshop
         # Create a switch statement to populate the $vms paremeter based on the the $azureLocalMachines number. $vms should be an array of strings containing the names of the VMs that will be created.
         # The VM name that is used during the deployment is based on the $vmPrefix variable, which is set in the labconfig file and should only include the AzL VMs and not include the DC or WAC VMs.
         # The range of $azureLocalMachines is 1-4
+
         switch ($azureLocalMachines) {
             1 { $vms = @("$vmPrefix-AzL1") }
             2 { $vms = @("$vmPrefix-AzL1", "$vmPrefix-AzL2") }
@@ -863,53 +864,84 @@ configuration AzLWorkshop
                 Ensure    = "Present"
                 DependsOn = "[Script]Update DC"
             }
-            # For each VM with a name like "AzL", create 2 vNICs and attach them to the Storage vSwitch with VLANs 711-719
+            # Create 2 storage vNICs per VM
             foreach ($vm in $vms) {
-                $nicNames = @("Storage1", "Storage2")
-                foreach ($nicName in $nicNames) {
-                    VMNetworkAdapter "Create${nicName}NIC" {
-                        Id         = "$vm-${nicName}-NIC"
-                        VMName     = "$vm"
-                        Name       = $nicName
-                        SwitchName = "Storage"
-                        Ensure     = "Present"
-                        DependsOn  = "[VMSwitch]CreateNonConvergedSwitch"
-                    }
+                VMNetworkAdapter "CreateNIC-$vm-Storage1" {
+                    Id         = "$vm-Storage1-NIC"
+                    VMName     = $vm
+                    Name       = "Storage1"
+                    SwitchName = "Storage"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateNonConvergedSwitch"
+                }
+                VMNetworkAdapter "CreateNIC-$vm-Storage2" {
+                    Id         = "$vm-Storage2-NIC"
+                    VMName     = $vm
+                    Name       = "Storage2"
+                    SwitchName = "Storage"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateNonConvergedSwitch"
                 }
             }
         }
         elseif ($azureLocalArchitecture -eq "2-Machine Switchless Dual-Link") {
             # Create 2 private vSwitches named "Storage1" and "Storage2"
-            VMSwitch "CreateStorageSwitches" {
-                Name      = @("Storage1-2", "Storage2-1")
+            VMSwitch "CreateStorageSwitch1-2" {
+                Name      = "Storage1-2"
                 Type      = "Private"
                 Ensure    = "Present"
                 DependsOn = "[Script]Update DC"
             }
-            # For each VM with a name like "AzL", create 2 vNICs and attach them to the Storage vSwitches
+
+            VMSwitch "CreateStorageSwitch2-1" {
+                Name      = "Storage2-1"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
             foreach ($vm in $vms) {
-                $nicNames = @("Storage1-2", "Storage2-1")
-                foreach ($nicName in $nicNames) {
-                    VMNetworkAdapter "Create${nicName}NIC" {
-                        Id         = "$vm-${nicName}-NIC"
-                        VMName     = "$vm"
-                        Name       = $nicName
-                        SwitchName = $nicName
-                        Ensure     = "Present"
-                        DependsOn  = "[VMSwitch]CreateStorageSwitches"
-                    }
+                VMNetworkAdapter "CreateNIC-$vm-Storage1-2" {
+                    Id         = "$vm-Storage1-2-NIC"
+                    VMName     = "$vm"
+                    Name       = "Storage1-2"
+                    SwitchName = "Storage1-2"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitch1-2"
+                }
+                VMNetworkAdapter "CreateNIC-$vm-Storage2-1" {
+                    Id         = "$vm-Storage2-1-NIC"
+                    VMName     = "$vm"
+                    Name       = "Storage2-1"
+                    SwitchName = "Storage2-1"
+                    Ensure     = "Present"
+                    DependsOn  = "[VMSwitch]CreateStorageSwitch2-1"
                 }
             }
         }
         # Create vSwitch and vNICs for 3-machine switchless single-link architectures
         elseif ($azureLocalArchitecture -eq "3-Machine Switchless Single-Link") {
             # Create 1 vSwitch per VM named "Storage" plus the Number of the 2 nodes that it will connect between (e.g. Storage1-2)
-            VMSwitch "CreateStorageSwitches" {
-                Name      = @("Storage1-2", "Storage2-3", "Storage1-3")
+            VMSwitch "CreateStorageSwitch1-2" {
+                Name      = "Storage1-2"
                 Type      = "Private"
                 Ensure    = "Present"
                 DependsOn = "[Script]Update DC"
             }
+
+            VMSwitch "CreateStorageSwitch2-3" {
+                Name      = "Storage2-3"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch1-3" {
+                Name      = "Storage1-3"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
             $machines = 1..3
             $nics = @(
                 @{ VM = 1; NICs = @("Storage1-2", "Storage1-3") },
@@ -919,13 +951,13 @@ configuration AzLWorkshop
 
             foreach ($machine in $machines) {
                 foreach ($nic in $nics[$machine - 1].NICs) {
-                    VMNetworkAdapter "Create${nic}NIC" {
-                        Id         = "($vmPrefix-AzL$machine)-${nic}-NIC"
+                    VMNetworkAdapter "CreateNIC-$vm-$nic" {
+                        Id         = "($vmPrefix-AzL$machine)-$nic-NIC"
                         VMName     = "$vmPrefix-AzL$machine"
                         Name       = $nic
                         SwitchName = $nic
                         Ensure     = "Present"
-                        DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                        DependsOn  = "[VMSwitch]CreateStorageSwitch1-2", "[VMSwitch]CreateStorageSwitch2-3", "[VMSwitch]CreateStorageSwitch1-3"
                     }
                 }
             }
@@ -933,12 +965,48 @@ configuration AzLWorkshop
         # Create vSwitch and vNICs for 3-machine switchless dual-link architectures
         elseif ($azureLocalArchitecture -like "3-Machine Switchless Dual-Link") {
             # Create 6 private vSwitches named "Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2", "Storage1-3", and "Storage3-1"
-            VMSwitch "CreateStorageSwitches" {
-                Name      = @("Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2", "Storage1-3", "Storage3-1")
+            VMSwitch "CreateStorageSwitch1-2" {
+                Name      = "Storage1-2"
                 Type      = "Private"
                 Ensure    = "Present"
                 DependsOn = "[Script]Update DC"
             }
+
+            VMSwitch "CreateStorageSwitch2-1" {
+                Name      = "Storage2-1"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch2-3" {
+                Name      = "Storage2-3"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch3-2" {
+                Name      = "Storage3-2"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch1-3" {
+                Name      = "Storage1-3"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch3-1" {
+                Name      = "Storage3-1"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
             $machineNics = @(
                 @{ VM = 1; NICs = @("Storage1-2", "Storage1-3", "Storage2-1", "Storage3-1") },
                 @{ VM = 2; NICs = @("Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2") },
@@ -947,13 +1015,13 @@ configuration AzLWorkshop
 
             foreach ($machine in $machineNics) {
                 foreach ($nicName in $machine.NICs) {
-                    VMNetworkAdapter "Create${nicName}NIC" {
-                        Id         = "($vmPrefix-AzL$($machine.VM))-${nicName}-NIC"
+                    VMNetworkAdapter "CreateNIC-$vm-$nicName" {
+                        Id         = "($vmPrefix-AzL$($machine.VM))-$nicName-NIC"
                         VMName     = "$vmPrefix-AzL$($machine.VM)"
                         Name       = $nicName
                         SwitchName = $nicName
                         Ensure     = "Present"
-                        DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                        DependsOn  = "[VMSwitch]CreateStorageSwitch1-2", "[VMSwitch]CreateStorageSwitch2-1", "[VMSwitch]CreateStorageSwitch2-3", "[VMSwitch]CreateStorageSwitch3-2", "[VMSwitch]CreateStorageSwitch1-3", "[VMSwitch]CreateStorageSwitch3-1"
                     }
                 }
             }
@@ -961,12 +1029,90 @@ configuration AzLWorkshop
         # Create vSwitch and vNICs for 4-machine switchless dual-link architectures
         elseif ($azureLocalArchitecture -like "4-Machine Switchless Dual-Link") {
             # Create 12 private vSwitches named "Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2", "Storage1-3", "Storage3-1", "Storage1-4", "Storage4-1", "Storage2-4", "Storage4-2", "Storage3-4", and "Storage4-3"
-            VMSwitch "CreateStorageSwitches" {
-                Name      = @("Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2", "Storage1-3", "Storage3-1", "Storage1-4", "Storage4-1", "Storage2-4", "Storage4-2", "Storage3-4", "Storage4-3")
+            VMSwitch "CreateStorageSwitch1-2" {
+                Name      = "Storage1-2"
                 Type      = "Private"
                 Ensure    = "Present"
                 DependsOn = "[Script]Update DC"
             }
+
+            VMSwitch "CreateStorageSwitch2-1" {
+                Name      = "Storage2-1"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch2-3" {
+                Name      = "Storage2-3"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch3-2" {
+                Name      = "Storage3-2"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch1-3" {
+                Name      = "Storage1-3"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch3-1" {
+                Name      = "Storage3-1"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch1-4" {
+                Name      = "Storage1-4"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch4-1" {
+                Name      = "Storage4-1"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch2-4" {
+                Name      = "Storage2-4"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch4-2" {
+                Name      = "Storage4-2"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch3-4" {
+                Name      = "Storage3-4"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
+            VMSwitch "CreateStorageSwitch4-3" {
+                Name      = "Storage4-3"
+                Type      = "Private"
+                Ensure    = "Present"
+                DependsOn = "[Script]Update DC"
+            }
+
             $machineNics = @(
                 @{ VM = 1; NICs = @("Storage1-2", "Storage1-3", "Storage1-4", "Storage2-1", "Storage3-1", "Storage4-1") },
                 @{ VM = 2; NICs = @("Storage1-2", "Storage2-1", "Storage2-3", "Storage2-4", "Storage3-2", "Storage4-2") },
@@ -976,13 +1122,13 @@ configuration AzLWorkshop
 
             foreach ($machine in $machineNics) {
                 foreach ($nicName in $machine.NICs) {
-                    VMNetworkAdapter "Create${nicName}NIC" {
-                        Id         = "($vmPrefix-AzL$($machine.VM))-${nicName}-NIC"
+                    VMNetworkAdapter "CreateNIC-$vm-$nicName" {
+                        Id         = "($vmPrefix-AzL$($machine.VM))-$nicName-NIC"
                         VMName     = "$vmPrefix-AzL$($machine.VM)"
                         Name       = $nicName
                         SwitchName = $nicName
                         Ensure     = "Present"
-                        DependsOn  = "[VMSwitch]CreateStorageSwitches"
+                        DependsOn  = "[VMSwitch]CreateStorageSwitch1-2", "[VMSwitch]CreateStorageSwitch2-1", "[VMSwitch]CreateStorageSwitch2-3", "[VMSwitch]CreateStorageSwitch3-2", "[VMSwitch]CreateStorageSwitch1-3", "[VMSwitch]CreateStorageSwitch3-1", "[VMSwitch]CreateStorageSwitch1-4", "[VMSwitch]CreateStorageSwitch4-1", "[VMSwitch]CreateStorageSwitch2-4", "[VMSwitch]CreateStorageSwitch4-2", "[VMSwitch]CreateStorageSwitch3-4", "[VMSwitch]CreateStorageSwitch4-3"
                     }
                 }
             }
@@ -990,12 +1136,40 @@ configuration AzLWorkshop
 
         # Set VLANs for the Storage vNICs based on the azureLocalArchitecture
         $vLANdependsOn = switch ($azureLocalArchitecture) {
-            { $_ -like "*Non-Converged" } { '"[VMNetworkAdapter]CreateStorage1NIC", "[VMNetworkAdapter]CreateStorage2NIC"' }
-            "2-Machine Switchless Dual-Link" { '"[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage2-1NIC")' }
-            "3-Machine Switchless Single-Link" { '"[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-3NIC")' }
-            "3-Machine Switchless Dual-Link" { '"[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC")' }
-            "4-Machine Switchless Dual-Link" { '"[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage1-4NIC", "[VMNetworkAdapter]CreateStorage2-1NIC", "[VMNetworkAdapter]CreateStorage2-3NIC", "[VMNetworkAdapter]CreateStorage2-4NIC", "[VMNetworkAdapter]CreateStorage3-1NIC", "[VMNetworkAdapter]CreateStorage3-2NIC", "[VMNetworkAdapter]CreateStorage3-4NIC", "[VMNetworkAdapter]CreateStorage4-1NIC", "[VMNetworkAdapter]CreateStorage4-2NIC", "[VMNetworkAdapter]CreateStorage4-3NIC")' }
+            "2-Machine Non-Converged" { "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage1", "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage2", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage1", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage2" }
+            "3-Machine Non-Converged" {
+                "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage1", "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage2", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage1", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage2", `
+                    "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage1", "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage2" 
+            }
+            "4-Machine Non-Converged" {
+                "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage1", "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage2", `
+                    "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage1", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage2", `
+                    "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage1", "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage2", `
+                    "[VMNetworkAdapter]CreateNIC-$($vms[3])-Storage1", "[VMNetworkAdapter]CreateNIC-$($vms[3])-Storage2" 
+            }
+            "2-Machine Switchless Dual-Link" {
+                "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage1-2", "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage2-1", `
+                    "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage1-2", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage2-1" 
+            }
+            "3-Machine Switchless Single-Link" {
+                "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage1-2", "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage1-3", `
+                    "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage1-2", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage2-3", `
+                    "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage1-3", "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage2-3" 
+            }
+            "3-Machine Switchless Dual-Link" {
+                "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage1-2", "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage1-3", "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage2-1", "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage3-1", `
+                    "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage1-2", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage2-1", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage2-3", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage3-2", `
+                    "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage1-3", "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage2-3", "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage3-1", "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage3-2" 
+            }
+            "4-Machine Switchless Dual-Link" {
+                "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage1-2", "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage1-3", "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage1-4", "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage2-1", "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage3-1", "[VMNetworkAdapter]CreateNIC-$($vms[0])-Storage4-1", `
+                    "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage1-2", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage2-1", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage2-3", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage2-4", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage3-2", "[VMNetworkAdapter]CreateNIC-$($vms[1])-Storage4-2", `
+                    "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage1-3", "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage2-3", "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage3-1", "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage3-4", "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage4-1", "[VMNetworkAdapter]CreateNIC-$($vms[2])-Storage4-3", `
+                    "[VMNetworkAdapter]CreateNIC-$($vms[3])-Storage1-4", "[VMNetworkAdapter]CreateNIC-$($vms[3])-Storage2-4", "[VMNetworkAdapter]CreateNIC-$($vms[3])-Storage3-4", "[VMNetworkAdapter]CreateNIC-$($vms[3])-Storage4-1", "[VMNetworkAdapter]CreateNIC-$($vms[3])-Storage4-2", "[VMNetworkAdapter]CreateNIC-$($vms[3])-Storage4-3" 
+            }            
         }
+
+        $vLANdependsOnString = ($vLANdependsOn | ForEach-Object { "`"$_`"" }) -join ", "
 
         Script "SetStorageVLANs" {
             GetScript  = {
@@ -1016,7 +1190,7 @@ configuration AzLWorkshop
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
-            DependsOn  = $vLANdependsOn
+            DependsOn  = $vLANdependsOnString
         }
 
         # Create RDP file for the DC VM
