@@ -410,49 +410,6 @@ try {
         -azureLocalMachineMemory $azureLocalMachineMemory -telemetryLevel $telemetryLevel -updateImages $updateImages `
         -WindowsServerIsoPath $WindowsServerIsoPath -AzureLocalIsoPath $AzureLocalIsoPath -customDNSForwarders $customDNSForwarders -Verbose
 
-    Write-Host "Checking if required Hyper-V role and platform is installed before deployment..."
-    $hypervRoleState = ((Get-WindowsOptionalFeature -Online -FeatureName *Microsoft-Hyper-V*) | Where-Object { $_.State -eq "Disabled" })
-    if ($hypervRoleState) {
-        Write-Host "`nThe following Hyper-V roles are missing:`n"
-        foreach ($feature in $hypervRoleState) {
-            "$($feature.FeatureName)"
-        }
-        Write-Host "`nDo you wish to enable them now?" -ForegroundColor Green
-        if ((Read-Host "(Type Y or N)") -eq "Y") {
-            Write-Host "`nYou chose to install the required Hyper-V role/features.`nYou will be prompted to reboot your machine once completed.`nRun the AzureLocalWorkshop.ps1 from your desktop when back online..."
-            Start-Sleep -Seconds 10
-            $reboot = $false
-            foreach ($feature in $hypervRoleState) {
-                $rebootCheck = Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -All -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
-                if ($($rebootCheck.RestartNeeded) -eq $true) {
-                    $reboot = $true
-                }
-            }
-            if ($reboot -eq $true) {
-                Write-Host "`nInstall completed. A reboot is required to finish installation - reboot now?`nIf not, you will need to reboot before deploying the Azure Local workshop..." -ForegroundColor Green
-                if ((Read-Host "(Type Y or N)") -eq "Y") {
-                    Write-Host "`nRebooting your host in 5 seconds...Run the AzureLocalWorkshop.ps1 from your desktop when back online..."
-                    Start-Sleep -Seconds 5
-                    Restart-Computer -Force
-                }
-                else {
-                    Write-Host 'You did not enter "Y" to confirm rebooting your host. Exiting... ' -ForegroundColor Red
-                    Break
-                }
-            }
-            else {
-                Write-Host "Install completed. No reboot is required at this time. Run the AzureLocalWorkshop.ps1 from your desktop to start the deployment..." -ForegroundColor Green
-            }
-        }
-        else {
-            Write-Host 'You did not enter "Y" to confirm installing the required Hyper-V role/features. Exiting... ' -ForegroundColor Red
-            Break
-        }
-    }
-    else {
-        Write-Host "`nAll required Hyper-V role/features are present. Run the AzureLocalWorkshop.ps1 from your desktop to start the deployment..." -ForegroundColor Green
-    }
-
     # Create a PS1 file that will be placed on the current user's desktop
     $ps1Path = "$env:USERPROFILE\Desktop\AzureLocalWorkshop.ps1"
     $ps1Content = @'
@@ -507,7 +464,51 @@ finally {
     try { Stop-Transcript | Out-Null } catch { }
 }
 '@
+    Write-Host "Creating AzureLocalWorkshop.ps1 on your desktop..."
     $ps1Content | Out-File -FilePath $ps1Path -Force
+
+    Write-Host "Checking if required Hyper-V role and platform is installed before deployment..."
+    $hypervRoleState = ((Get-WindowsOptionalFeature -Online -FeatureName *Microsoft-Hyper-V*) | Where-Object { $_.State -eq "Disabled" })
+    if ($hypervRoleState) {
+        Write-Host "`nThe following Hyper-V roles are missing:`n"
+        foreach ($feature in $hypervRoleState) {
+            "$($feature.FeatureName)"
+        }
+        Write-Host "`nDo you wish to enable them now?" -ForegroundColor Green
+        if ((Read-Host "(Type Y or N)") -eq "Y") {
+            Write-Host "`nYou chose to install the required Hyper-V role/features.`nYou will be prompted to reboot your machine once completed.`nRun the AzureLocalWorkshop.ps1 from your desktop when back online..."
+            Start-Sleep -Seconds 10
+            $reboot = $false
+            foreach ($feature in $hypervRoleState) {
+                $rebootCheck = Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -All -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
+                if ($($rebootCheck.RestartNeeded) -eq $true) {
+                    $reboot = $true
+                }
+            }
+            if ($reboot -eq $true) {
+                Write-Host "`nInstall completed. A reboot is required to finish installation - reboot now?`nIf not, you will need to reboot before deploying the Azure Local workshop..." -ForegroundColor Green
+                if ((Read-Host "(Type Y or N)") -eq "Y") {
+                    Write-Host "`nRebooting your host in 5 seconds...Run the AzureLocalWorkshop.ps1 from your desktop when back online..."
+                    Start-Sleep -Seconds 5
+                    Restart-Computer -Force
+                }
+                else {
+                    Write-Host 'You did not enter "Y" to confirm rebooting your host. Exiting... ' -ForegroundColor Red
+                    Break
+                }
+            }
+            else {
+                Write-Host "Install completed. No reboot is required at this time. Run the AzureLocalWorkshop.ps1 from your desktop to start the deployment..." -ForegroundColor Green
+            }
+        }
+        else {
+            Write-Host 'You did not enter "Y" to confirm installing the required Hyper-V role/features. Exiting... ' -ForegroundColor Red
+            Break
+        }
+    }
+    else {
+        Write-Host "`nAll required Hyper-V role/features are present. Run the AzureLocalWorkshop.ps1 from your desktop to start the deployment..." -ForegroundColor Green
+    }
 }
 catch {
     Set-Location $PSScriptRoot
