@@ -712,69 +712,6 @@ configuration AzLWorkshop
             $rdpConfigPath = "$desktopPath\$vmPrefix-DC.rdp"
         }
 
-        Script "Download RDP File" {
-            GetScript  = {
-                $result = Test-Path -Path "$Using:rdpConfigPath"
-                return @{ 'Result' = $result }
-            }
-
-            SetScript  = {
-                $ProgressPreference = 'SilentlyContinue'
-                Invoke-WebRequest -Uri "$Using:rdpConfigUri" -OutFile "$Using:rdpConfigPath" -UseBasicParsing
-            }
-
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
-            }
-            DependsOn  = "[Script]MSLab DeployEnvironment"
-        }
-
-        Script "Edit RDP file" {
-            GetScript  = {
-                $result = ((Get-Item $Using:rdpConfigPath).LastWriteTime -ge (Get-Date))
-                return @{ 'Result' = $result }
-            }
-
-            SetScript  = {
-                $vmIpAddress = (Get-VMNetworkAdapter -Name 'Internet' -VMName "$Using:vmPrefix-DC").IpAddresses | Where-Object { $_ -notmatch ':' }
-                $rdpConfigFile = Get-Content -Path "$Using:rdpConfigPath"
-                $rdpConfigFile = $rdpConfigFile.Replace("<<VM_IP_Address>>", $vmIpAddress)
-                Out-File -FilePath "$Using:rdpConfigPath" -InputObject $rdpConfigFile -Force
-            }
-
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
-            }
-            DependsOn  = "[Script]Download RDP File"
-        }
-
-        if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
-
-            Script "Create RDP RunOnce" {
-                GetScript  = {
-                    $result = [bool] (Get-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name '!CopyRDPFile' -ErrorAction SilentlyContinue)
-                    return @{ 'Result' = $result }
-                }
-    
-                SetScript  = {
-                    $command = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -command `"Copy-Item -Path `'$Using:rdpConfigPath`' -Destination `'$Using:desktopPath`' -Force`""
-                    Set-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name '!CopyRDPFile' `
-                        -Value $command
-                }
-
-                TestScript = {
-                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                    $state = [scriptblock]::Create($GetScript).Invoke()
-                    return $state.Result
-                }
-                DependsOn  = "[Script]Edit RDP File"
-            }
-        }
-
         Script "Enable RDP on DC" {
             GetScript  = {
                 $vmIpAddress = (Get-VMNetworkAdapter -Name 'Internet' -VMName "$Using:vmPrefix-DC").IpAddresses | Where-Object { $_ -notmatch ':' }
@@ -801,7 +738,7 @@ configuration AzLWorkshop
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
-            DependsOn  = "[Script]Edit RDP File"
+            DependsOn  = "[Script]MSLab DeployEnvironment"
         }
         
         Script "Deploy WAC" {
@@ -859,37 +796,48 @@ configuration AzLWorkshop
 
         Script "Update DC" {
             GetScript  = {
-                Start-Sleep -Seconds 10
-                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                $result = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
-                    if (Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object subject -like "CN=WindowsAdminCenterSelfSigned") {
-                        return $true
-                    }
-                    else {
-                        return $false
-                    }
-                }
-                return @{ 'Result' = $result }
+            Start-Sleep -Seconds 10
+            $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+            $result = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                $wallpaperSet = (Get-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name Wallpaper -ErrorAction SilentlyContinue).Wallpaper -eq "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png"
+                $certExists = (Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object subject -like "CN=WindowsAdminCenterSelfSigned")
+                $ieEscAdminDisabled = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -ErrorAction SilentlyContinue).IsInstalled -eq 0
+                $ieEscUserDisabled = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -ErrorAction SilentlyContinue).IsInstalled -eq 0
+                $wacPromptDisabled = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ServerManager' -Name 'DoNotPopWACConsoleAtSMLaunch' -ErrorAction SilentlyContinue).DoNotPopWACConsoleAtSMLaunch -eq 1
+                $networkProfilePromptDisabled = Test-Path 'HKLM:\System\CurrentControlSet\Control\Network\NewNetworkWindowOff'
+                return ($wallpaperSet -and $certExists -and $ieEscAdminDisabled -and $ieEscUserDisabled -and $wacPromptDisabled -and $networkProfilePromptDisabled)
             }
+            return @{ 'Result' = $result }
+        }
 
             SetScript  = {
-                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
-                    $GatewayServerName = "WAC"
-                    Start-Sleep 10
-                    Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/media/azlwallpaper.png' -OutFile "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -UseBasicParsing
-                    Set-GPPrefRegistryValue -Name "Default Domain Policy" -Context User -Action Replace -Key "HKCU\Control Panel\Desktop" -ValueName Wallpaper -Value "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -Type String
-                    $cert = Invoke-Command -ComputerName $GatewayServerName `
-                        -ScriptBlock { Get-ChildItem Cert:\LocalMachine\My\ | Where-Object subject -eq "CN=WindowsAdminCenterSelfSigned" }
-                    $cert | Export-Certificate -FilePath $env:TEMP\WACCert.cer
-                    Import-Certificate -FilePath $env:TEMP\WACCert.cer -CertStoreLocation Cert:\LocalMachine\Root\
-                }
+            $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+            Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                # Update wallpaper
+                Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/media/azlwallpaper.png' -OutFile "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -UseBasicParsing
+                Set-GPPrefRegistryValue -Name "Default Domain Policy" -Context User -Action Replace -Key "HKCU\Control Panel\Desktop" -ValueName Wallpaper -Value "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -Type String
+                # Update WAC certificate
+                $GatewayServerName = "WAC"
+                Start-Sleep 10
+                $cert = Invoke-Command -ComputerName $GatewayServerName `
+                -ScriptBlock { Get-ChildItem Cert:\LocalMachine\My\ | Where-Object subject -eq "CN=WindowsAdminCenterSelfSigned" }
+                $cert | Export-Certificate -FilePath $env:TEMP\WACCert.cer
+                Import-Certificate -FilePath $env:TEMP\WACCert.cer -CertStoreLocation Cert:\LocalMachine\Root\
+                # Disable Internet Explorer ESC for Admin
+                Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Value 0 -Type Dword
+                # Disable Internet Explorer ESC for User
+                Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Value 0 -Type Dword
+                # Disable Server Manager WAC Prompt
+                Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ServerManager' -Name 'DoNotPopWACConsoleAtSMLaunch' -Value 1 -Type Dword
+                # Disable Network Profile Prompt
+                New-Item -Path 'HKLM:\System\CurrentControlSet\Control\Network\NewNetworkWindowOff' -Force | Out-Null
             }
+        }
 
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
+            # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+            $state = [scriptblock]::Create($GetScript).Invoke()
+            return $state.Result
             }
             DependsOn  = "[Script]Deploy WAC"
         }
@@ -1028,7 +976,9 @@ configuration AzLWorkshop
                 }
             }
         }
-        $dependsOn = switch ($azureLocalArchitecture) {
+
+        # Set VLANs for the Storage vNICs based on the azureLocalArchitecture
+        $vLANdependsOn = switch ($azureLocalArchitecture) {
             { $_ -like "*Non-Converged" } { '@("[VMNetworkAdapter]CreateStorage1NIC", "[VMNetworkAdapter]CreateStorage2NIC")' }
             "2-Machine Switchless Dual-Link" { '@("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage2-1NIC")' }
             "3-Machine Switchless Single-Link" { '@("[VMNetworkAdapter]CreateStorage1-2NIC", "[VMNetworkAdapter]CreateStorage1-3NIC", "[VMNetworkAdapter]CreateStorage2-3NIC")' }
@@ -1056,7 +1006,78 @@ configuration AzLWorkshop
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
-            DependsOn  = $dependsOn
+            DependsOn  = $vLANdependsOn
+        }
+
+        # Create RDP file for the DC VM
+        # if $azureLocalArchitecture is either 'Single Machine' or '*Fully-Converged', $rdpDependsOn should be "[Script]Update DC", otherwse it should be "[Script]SetStorageVLANs"
+        $rdpDependsOn = switch ($azureLocalArchitecture) {
+            { $_ -eq "Single Machine" -or $_ -like "*Fully-Converged" } { '[Script]Update DC' }
+            Default { '[Script]SetStorageVLANs' }
+        }
+
+        Script "Download RDP File" {
+            GetScript  = {
+                $result = Test-Path -Path "$Using:rdpConfigPath"
+                return @{ 'Result' = $result }
+            }
+
+            SetScript  = {
+                $ProgressPreference = 'SilentlyContinue'
+                Invoke-WebRequest -Uri "$Using:rdpConfigUri" -OutFile "$Using:rdpConfigPath" -UseBasicParsing
+            }
+
+            TestScript = {
+                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
+            }
+            DependsOn  = $rdpDependsOn
+        }
+
+        Script "Edit RDP file" {
+            GetScript  = {
+                $result = ((Get-Item $Using:rdpConfigPath).LastWriteTime -ge (Get-Date))
+                return @{ 'Result' = $result }
+            }
+
+            SetScript  = {
+                $vmIpAddress = (Get-VMNetworkAdapter -Name 'Internet' -VMName "$Using:vmPrefix-DC").IpAddresses | Where-Object { $_ -notmatch ':' }
+                $rdpConfigFile = Get-Content -Path "$Using:rdpConfigPath"
+                $rdpConfigFile = $rdpConfigFile.Replace("<<VM_IP_Address>>", $vmIpAddress)
+                $rdpConfigFile = $rdpConfigFile.Replace("<<rdpUserName>>", $msLabUsername)
+                Out-File -FilePath "$Using:rdpConfigPath" -InputObject $rdpConfigFile -Force
+            }
+
+            TestScript = {
+                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
+            }
+            DependsOn  = "[Script]Download RDP File"
+        }
+
+        if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
+
+            Script "Create RDP RunOnce" {
+                GetScript  = {
+                    $result = [bool] (Get-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name '!CopyRDPFile' -ErrorAction SilentlyContinue)
+                    return @{ 'Result' = $result }
+                }
+    
+                SetScript  = {
+                    $command = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -command `"Copy-Item -Path `'$Using:rdpConfigPath`' -Destination `'$Using:desktopPath`' -Force`""
+                    Set-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name '!CopyRDPFile' `
+                        -Value $command
+                }
+
+                TestScript = {
+                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "[Script]Edit RDP File"
+            }
         }
     }
 }
