@@ -858,7 +858,7 @@ configuration AzLWorkshop
 
         # Create the Host vSwitches and vNICs to align with the desired azureLocalArchitecture
         if ($azureLocalArchitecture -like "*Non-Converged") {
-            VMSwitch "CreateNonConvergedSwitch" {
+            VMSwitch "NonConvergedSwitch" {
                 Name      = "Storage"
                 Type      = "Private"
                 Ensure    = "Present"
@@ -866,21 +866,21 @@ configuration AzLWorkshop
             }
             # Create 2 storage vNICs per VM
             foreach ($vm in $vms) {
-                VMNetworkAdapter "CreateNIC$($vm)Storage1" {
+                VMNetworkAdapter "$($vm)Storage1" {
                     Id         = "$vm-Storage1-NIC"
                     VMName     = "$vmPrefix-$vm"
                     Name       = "Storage1"
                     SwitchName = "Storage"
                     Ensure     = "Present"
-                    DependsOn  = "[VMSwitch]CreateNonConvergedSwitch"
+                    DependsOn  = "[VMSwitch]NonConvergedSwitch"
                 }
-                VMNetworkAdapter "CreateNIC$($vm)Storage2" {
+                VMNetworkAdapter "$($vm)Storage2" {
                     Id         = "$vm-Storage2-NIC"
                     VMName     = "$vmPrefix-$vm"
                     Name       = "Storage2"
                     SwitchName = "Storage"
                     Ensure     = "Present"
-                    DependsOn  = "[VMSwitch]CreateNonConvergedSwitch"
+                    DependsOn  = "[VMSwitch]NonConvergedSwitch"
                 }
             }
         }
@@ -900,7 +900,7 @@ configuration AzLWorkshop
                 DependsOn = "[Script]Update DC"
             }
             foreach ($vm in $vms) {
-                VMNetworkAdapter "CreateNIC$($vm)Storage1-2" {
+                VMNetworkAdapter "$($vm)Storage1-2" {
                     Id         = "$vm-Storage1-2-NIC"
                     VMName     = "$vmPrefix-$vm"
                     Name       = "Storage1-2"
@@ -908,7 +908,7 @@ configuration AzLWorkshop
                     Ensure     = "Present"
                     DependsOn  = "[VMSwitch]CreateStorageSwitch1-2"
                 }
-                VMNetworkAdapter "CreateNIC$($vm)Storage2-1" {
+                VMNetworkAdapter "$($vm)Storage2-1" {
                     Id         = "$vm-Storage2-1-NIC"
                     VMName     = "$vmPrefix-$vm"
                     Name       = "Storage2-1"
@@ -951,7 +951,7 @@ configuration AzLWorkshop
 
             foreach ($machine in $machines) {
                 foreach ($nic in $nics[$machine - 1].NICs) {
-                    VMNetworkAdapter "CreateNIC$vm$nic" {
+                    VMNetworkAdapter "$($vm)$($nic)" {
                         Id         = "(AzL$machine)-$nic-NIC"
                         VMName     = "$vmPrefix-AzL$machine"
                         Name       = $nic
@@ -1015,7 +1015,7 @@ configuration AzLWorkshop
 
             foreach ($machine in $machineNics) {
                 foreach ($nicName in $machine.NICs) {
-                    VMNetworkAdapter "CreateNIC$vm$nicName" {
+                    VMNetworkAdapter "$($vm)$($nicName)" {
                         Id         = "($vmPrefix-AzL$($machine.VM))-$nicName-NIC"
                         VMName     = "$vmPrefix-AzL$($machine.VM)"
                         Name       = $nicName
@@ -1122,7 +1122,7 @@ configuration AzLWorkshop
 
             foreach ($machine in $machineNics) {
                 foreach ($nicName in $machine.NICs) {
-                    VMNetworkAdapter "CreateNIC$($vm)$($nicName)" {
+                    VMNetworkAdapter "$($vm)$($nicName)" {
                         Id         = "$vmPrefix-AzL$($machine.VM)-$nicName-NIC"
                         VMName     = "$vmPrefix-AzL$($machine.VM)"
                         Name       = $nicName
@@ -1136,61 +1136,75 @@ configuration AzLWorkshop
 
         # Set VLANs for the Storage vNICs based on the azureLocalArchitecture
         $vLANdependsOn = switch ($azureLocalArchitecture) {
-            "2-Machine Non-Converged" { "[VMNetworkAdapter]CreateNIC$($vms[0])Storage1", "[VMNetworkAdapter]CreateNIC$($vms[0])Storage2", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage1", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage2" }
+            "2-Machine Non-Converged" { "[VMNetworkAdapter]$($vms[0])Storage1", "[VMNetworkAdapter]$($vms[0])Storage2", "[VMNetworkAdapter]$($vms[1])Storage1", "[VMNetworkAdapter]$($vms[1])Storage2" }
             "3-Machine Non-Converged" {
-                "[VMNetworkAdapter]CreateNIC$($vms[0])Storage1", "[VMNetworkAdapter]CreateNIC$($vms[0])Storage2", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage1", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage2", `
-                    "[VMNetworkAdapter]CreateNIC$($vms[2])Storage1", "[VMNetworkAdapter]CreateNIC$($vms[2])Storage2" 
+                "[VMNetworkAdapter]$($vms[0])Storage1", "[VMNetworkAdapter]$($vms[0])Storage2", "[VMNetworkAdapter]$($vms[1])Storage1", "[VMNetworkAdapter]$($vms[1])Storage2", `
+                    "[VMNetworkAdapter]$($vms[2])Storage1", "[VMNetworkAdapter]$($vms[2])Storage2" 
             }
             "4-Machine Non-Converged" {
-                "[VMNetworkAdapter]CreateNIC$($vms[0])Storage1", "[VMNetworkAdapter]CreateNIC$($vms[0])Storage2", `
-                    "[VMNetworkAdapter]CreateNIC$($vms[1])Storage1", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage2", `
-                    "[VMNetworkAdapter]CreateNIC$($vms[2])Storage1", "[VMNetworkAdapter]CreateNIC$($vms[2])Storage2", `
-                    "[VMNetworkAdapter]CreateNIC$($vms[3])Storage1", "[VMNetworkAdapter]CreateNIC$($vms[3])Storage2" 
+                "[VMNetworkAdapter]$($vms[0])Storage1", "[VMNetworkAdapter]$($vms[0])Storage2", `
+                    "[VMNetworkAdapter]$($vms[1])Storage1", "[VMNetworkAdapter]$($vms[1])Storage2", `
+                    "[VMNetworkAdapter]$($vms[2])Storage1", "[VMNetworkAdapter]$($vms[2])Storage2", `
+                    "[VMNetworkAdapter]$($vms[3])Storage1", "[VMNetworkAdapter]$($vms[3])Storage2" 
             }
             "2-Machine Switchless Dual-Link" {
-                "[VMNetworkAdapter]CreateNIC$($vms[0])Storage1-2", "[VMNetworkAdapter]CreateNIC$($vms[0])Storage2-1", `
-                    "[VMNetworkAdapter]CreateNIC$($vms[1])Storage1-2", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage2-1" 
+                "[VMNetworkAdapter]$($vms[0])Storage1-2", "[VMNetworkAdapter]$($vms[0])Storage2-1", `
+                    "[VMNetworkAdapter]$($vms[1])Storage1-2", "[VMNetworkAdapter]$($vms[1])Storage2-1" 
             }
             "3-Machine Switchless Single-Link" {
-                "[VMNetworkAdapter]CreateNIC$($vms[0])Storage1-2", "[VMNetworkAdapter]CreateNIC$($vms[0])Storage1-3", `
-                    "[VMNetworkAdapter]CreateNIC$($vms[1])Storage1-2", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage2-3", `
-                    "[VMNetworkAdapter]CreateNIC$($vms[2])Storage1-3", "[VMNetworkAdapter]CreateNIC$($vms[2])Storage2-3" 
+                "[VMNetworkAdapter]$($vms[0])Storage1-2", "[VMNetworkAdapter]$($vms[0])Storage1-3", `
+                    "[VMNetworkAdapter]$($vms[1])Storage1-2", "[VMNetworkAdapter]$($vms[1])Storage2-3", `
+                    "[VMNetworkAdapter]$($vms[2])Storage1-3", "[VMNetworkAdapter]$($vms[2])Storage2-3" 
             }
             "3-Machine Switchless Dual-Link" {
-                "[VMNetworkAdapter]CreateNIC$($vms[0])Storage1-2", "[VMNetworkAdapter]CreateNIC$($vms[0])Storage1-3", "[VMNetworkAdapter]CreateNIC$($vms[0])Storage2-1", "[VMNetworkAdapter]CreateNIC$($vms[0])Storage3-1", `
-                    "[VMNetworkAdapter]CreateNIC$($vms[1])Storage1-2", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage2-1", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage2-3", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage3-2", `
-                    "[VMNetworkAdapter]CreateNIC$($vms[2])Storage1-3", "[VMNetworkAdapter]CreateNIC$($vms[2])Storage2-3", "[VMNetworkAdapter]CreateNIC$($vms[2])Storage3-1", "[VMNetworkAdapter]CreateNIC$($vms[2])Storage3-2" 
+                "[VMNetworkAdapter]$($vms[0])Storage1-2", "[VMNetworkAdapter]$($vms[0])Storage1-3", "[VMNetworkAdapter]$($vms[0])Storage2-1", "[VMNetworkAdapter]$($vms[0])Storage3-1", `
+                    "[VMNetworkAdapter]$($vms[1])Storage1-2", "[VMNetworkAdapter]$($vms[1])Storage2-1", "[VMNetworkAdapter]$($vms[1])Storage2-3", "[VMNetworkAdapter]$($vms[1])Storage3-2", `
+                    "[VMNetworkAdapter]$($vms[2])Storage1-3", "[VMNetworkAdapter]$($vms[2])Storage2-3", "[VMNetworkAdapter]$($vms[2])Storage3-1", "[VMNetworkAdapter]$($vms[2])Storage3-2" 
             }
             "4-Machine Switchless Dual-Link" {
-                "[VMNetworkAdapter]CreateNIC$($vms[0])Storage1-2", "[VMNetworkAdapter]CreateNIC$($vms[0])Storage1-3", "[VMNetworkAdapter]CreateNIC$($vms[0])Storage1-4", "[VMNetworkAdapter]CreateNIC$($vms[0])Storage2-1", "[VMNetworkAdapter]CreateNIC$($vms[0])Storage3-1", "[VMNetworkAdapter]CreateNIC$($vms[0])Storage4-1", `
-                    "[VMNetworkAdapter]CreateNIC$($vms[1])Storage1-2", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage2-1", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage2-3", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage2-4", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage3-2", "[VMNetworkAdapter]CreateNIC$($vms[1])Storage4-2", `
-                    "[VMNetworkAdapter]CreateNIC$($vms[2])Storage1-3", "[VMNetworkAdapter]CreateNIC$($vms[2])Storage2-3", "[VMNetworkAdapter]CreateNIC$($vms[2])Storage3-1", "[VMNetworkAdapter]CreateNIC$($vms[2])Storage3-4", "[VMNetworkAdapter]CreateNIC$($vms[2])Storage4-1", "[VMNetworkAdapter]CreateNIC$($vms[2])Storage4-3", `
-                    "[VMNetworkAdapter]CreateNIC$($vms[3])Storage1-4", "[VMNetworkAdapter]CreateNIC$($vms[3])Storage2-4", "[VMNetworkAdapter]CreateNIC$($vms[3])Storage3-4", "[VMNetworkAdapter]CreateNIC$($vms[3])Storage4-1", "[VMNetworkAdapter]CreateNIC$($vms[3])Storage4-2", "[VMNetworkAdapter]CreateNIC$($vms[3])Storage4-3" 
+                "[VMNetworkAdapter]$($vms[0])Storage1-2", "[VMNetworkAdapter]$($vms[0])Storage1-3", "[VMNetworkAdapter]$($vms[0])Storage1-4", "[VMNetworkAdapter]$($vms[0])Storage2-1", "[VMNetworkAdapter]$($vms[0])Storage3-1", "[VMNetworkAdapter]$($vms[0])Storage4-1", `
+                    "[VMNetworkAdapter]$($vms[1])Storage1-2", "[VMNetworkAdapter]$($vms[1])Storage2-1", "[VMNetworkAdapter]$($vms[1])Storage2-3", "[VMNetworkAdapter]$($vms[1])Storage2-4", "[VMNetworkAdapter]$($vms[1])Storage3-2", "[VMNetworkAdapter]$($vms[1])Storage4-2", `
+                    "[VMNetworkAdapter]$($vms[2])Storage1-3", "[VMNetworkAdapter]$($vms[2])Storage2-3", "[VMNetworkAdapter]$($vms[2])Storage3-1", "[VMNetworkAdapter]$($vms[2])Storage3-4", "[VMNetworkAdapter]$($vms[2])Storage4-1", "[VMNetworkAdapter]$($vms[2])Storage4-3", `
+                    "[VMNetworkAdapter]$($vms[3])Storage1-4", "[VMNetworkAdapter]$($vms[3])Storage2-4", "[VMNetworkAdapter]$($vms[3])Storage3-4", "[VMNetworkAdapter]$($vms[3])Storage4-1", "[VMNetworkAdapter]$($vms[3])Storage4-2", "[VMNetworkAdapter]$($vms[3])Storage4-3" 
             }
         }
 
-        $vLANdependsOnString = ($vLANdependsOn | ForEach-Object { "`"$_`"" }) -join ", "
+        $vLANdependsOnString = ($vLANdependsOn | ForEach-Object { "'$_'" }) -join ", "
 
-        Script "SetStorageVLANs" {
-            GetScript  = {
-                $result = $true
-                return @{ 'Result' = $result }
-            }
-            SetScript  = {
-                foreach ($vm in $Using:vms) {
-                    $nics = Get-VMNetworkAdapter -VMName $vm | Where-Object Name -like "Storage*"
-                    foreach ($nic in $nics) {
-                        Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm -Access -VlanId 0
-                        Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm -Trunk -AllowedVlanIdList 711-719
+        # Perform the SetStorageVLANs script based on the $azureLocalArchitecture
+        # Not necessary if $azureLocalArchitecture is either 'Single Machine' or '*Fully-Converged'
+
+        if ($azureLocalArchitecture -notlike "Single Machine" -and $azureLocalArchitecture -notlike "*Fully-Converged") {
+            Script "SetStorageVLANs" {
+                GetScript  = {
+                    $result = $true
+                    foreach ($vm in $Using:vms) {
+                        $nics = Get-VMNetworkAdapter -VMName $vm | Where-Object Name -like "Storage*"
+                        foreach ($nic in $nics) {
+                            $vlanSettings = Get-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm
+                            if ($vlanSettings.Trunk -eq $false -or $vlanSettings.AllowedVlanIdList -ne "711-719") {
+                                $result = $false
+                            }
+                        }
+                    }
+                    return @{ 'Result' = $result }
+                }
+                SetScript  = {
+                    foreach ($vm in $Using:vms) {
+                        $nics = Get-VMNetworkAdapter -VMName $vm | Where-Object Name -like "Storage*"
+                        foreach ($nic in $nics) {
+                            Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm -Access -VlanId 0
+                            Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $vm -Trunk -AllowedVlanIdList 711-719
+                        }
                     }
                 }
+                TestScript = {
+                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "$vLANdependsOnString", "[Script]Update DC"
             }
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
-            }
-            DependsOn  = $vLANdependsOnString
         }
 
         # Create RDP file for the DC VM
