@@ -94,50 +94,7 @@ try {
     # Ensure WinRM is configured to allow DSC to run
     Write-Host "Checking PSRemoting to allow PowerShell DSC to run..."
     Enable-PSRemoting -Force -SkipNetworkProfileCheck
-    Write-Host "PSRemoting enabled..."
-
-    # Firstly, validate if Hyper-V is installed and prompt to enable and reboot if not
-    Write-Host "Checking if required Hyper-V role/features are installed..."
-    $hypervState = ((Get-WindowsOptionalFeature -Online -FeatureName *Hyper-V*) | Where-Object { $_.State -eq "Disabled" })
-    if ($hypervState) {
-        Write-Host "`nThe following Hyper-V role/features are missing:`n"
-        foreach ($feature in $hypervState) {
-            "$($feature.FeatureName)"
-        }
-        Write-Host "`nDo you wish to enable them now?" -ForegroundColor Green
-        if ((Read-Host "(Type Y or N)") -eq "Y") {
-            Write-Host "`nYou chose to install the required Hyper-V role/features.`nYou will be prompted to reboot your machine once completed.`nRerun this script when back online..."
-            Start-Sleep -Seconds 10
-            $reboot = $false
-            foreach ($feature in $hypervState) {
-                $rebootCheck = Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -All -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
-                if ($($rebootCheck.RestartNeeded) -eq $true) {
-                    $reboot = $true
-                }
-            }
-            if ($reboot -eq $true) {
-                Write-Host "`nInstall completed. A reboot is required to finish installation - reboot now?`nIf not, you will need to reboot before deploying the Azure Local workshop..." -ForegroundColor Green
-                if ((Read-Host "(Type Y or N)") -eq "Y") {
-                    Start-Sleep -Seconds 5
-                    Restart-Computer -Force
-                }
-                else {
-                    Write-Host 'You did not enter "Y" to confirm rebooting your host. Exiting... ' -ForegroundColor Red
-                    Break
-                }
-            }
-            else {
-                Write-Host "Install completed. No reboot is required at this time. Continuing process..." -ForegroundColor Green
-            }
-        }
-        else {
-            Write-Host 'You did not enter "Y" to confirm installing the required Hyper-V role/features. Exiting... ' -ForegroundColor Red
-            Break
-        }
-    }
-    else {
-        Write-Host "`nAll required Hyper-V role/features are present. Continuing process..." -ForegroundColor Green
-    }
+    Write-Host "PSRemoting enabled..." -ForegroundColor Green
 
     # Need to validate if $azureLocalArchitecture has been provided and that it meets one of the supported values
     if (!($azureLocalArchitecture)) {
@@ -414,13 +371,19 @@ try {
         break
     }
 
-    ### START LOGGING ###
-    $runTime = $(Get-Date).ToString("MMddyy-HHmmss")
-    $fullLogPath = "$PSScriptRoot\WorkshopLog_$runTime.txt"
-    Write-Host "`nLog folder full path is $fullLogPath"
-    Start-Transcript -Path "$fullLogPath" -Append
-    $startTime = Get-Date -Format g
-    $sw = [Diagnostics.Stopwatch]::StartNew()
+    # Validate Hyper-V, starting with the management tools to allow for MOF to be successfully generated
+    # Need to check for Hyper-V RSAT tools, client management and Hyper-V PowerShell
+    Write-Host "Checking if Hyper-V management tools are installed..."
+    $hypervToolsState = ((Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -eq "RSAT-Hyper-V-Tools-Feature" -or $_.FeatureName -eq "Microsoft-Hyper-V-Management-Clients" -or $_.FeatureName -eq "Microsoft-Hyper-V-Management-PowerShell" }) | Where-Object { $_.State -eq "Disabled" })
+    if ($hypervToolsState) {
+        Write-Host "`nThe following Hyper-V management features are missing and will now be installed:`n"
+        foreach ($feature in $hypervToolsState) {
+            "$($feature.FeatureName)"
+        }
+        foreach ($feature in $hypervToolsState) {
+            Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -All -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
+        }
+    }
 
     # Download the AzLWorkshop DSC files, and unzip them to C:\AzLWorkshopHost, then copy the PS modules to the main PS modules folder
     Write-Host "`nStarting Azure Local workshop deployment - please do not close this PowerShell window"
@@ -447,13 +410,80 @@ try {
         -azureLocalMachineMemory $azureLocalMachineMemory -telemetryLevel $telemetryLevel -updateImages $updateImages `
         -WindowsServerIsoPath $WindowsServerIsoPath -AzureLocalIsoPath $AzureLocalIsoPath -customDNSForwarders $customDNSForwarders
 
-    # Change location to where the MOFs are located, then execute the DSC configuration
-    Set-Location .\AzLWorkshop\
+    Write-Host "Checking if required Hyper-V role and platform is installed before deployment..."
+    $hypervRoleState = ((Get-WindowsOptionalFeature -Online -FeatureName *Microsoft-Hyper-V*) | Where-Object { $_.State -eq "Disabled" })
+    if ($hypervRoleState) {
+        Write-Host "`nThe following Hyper-V roles are missing:`n"
+        foreach ($feature in $hypervRoleState) {
+            "$($feature.FeatureName)"
+        }
+        Write-Host "`nDo you wish to enable them now?" -ForegroundColor Green
+        if ((Read-Host "(Type Y or N)") -eq "Y") {
+            Write-Host "`nYou chose to install the required Hyper-V role/features.`nYou will be prompted to reboot your machine once completed.`nRun the AzureLocalWorkshop.ps1 from your desktop when back online..."
+            Start-Sleep -Seconds 10
+            $reboot = $false
+            foreach ($feature in $hypervRoleState) {
+                $rebootCheck = Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -All -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
+                if ($($rebootCheck.RestartNeeded) -eq $true) {
+                    $reboot = $true
+                }
+            }
+            if ($reboot -eq $true) {
+                Write-Host "`nInstall completed. A reboot is required to finish installation - reboot now?`nIf not, you will need to reboot before deploying the Azure Local workshop..." -ForegroundColor Green
+                if ((Read-Host "(Type Y or N)") -eq "Y") {
+                    Write-Host "`nRebooting your host in 5 seconds...Run the AzureLocalWorkshop.ps1 from your desktop when back online..."
+                    Start-Sleep -Seconds 5
+                    Restart-Computer -Force
+                }
+                else {
+                    Write-Host 'You did not enter "Y" to confirm rebooting your host. Exiting... ' -ForegroundColor Red
+                    Break
+                }
+            }
+            else {
+                Write-Host "Install completed. No reboot is required at this time. Run the AzureLocalWorkshop.ps1 from your desktop to start the deployment..." -ForegroundColor Green
+            }
+        }
+        else {
+            Write-Host 'You did not enter "Y" to confirm installing the required Hyper-V role/features. Exiting... ' -ForegroundColor Red
+            Break
+        }
+    }
+    else {
+        Write-Host "`nAll required Hyper-V role/features are present. Run the AzureLocalWorkshop.ps1 from your desktop to start the deployment..." -ForegroundColor Green
+    }
+
+    # Create a PS1 file that will be placed on the current user's desktop
+    $ps1Path = "$env:USERPROFILE\Desktop\AzureLocalWorkshop.ps1"
+    $ps1Content = @'
+$Global:VerbosePreference = 'SilentlyContinue'
+$Global:ProgressPreference = 'SilentlyContinue'
+try { Stop-Transcript | Out-Null } catch { }
+try {
+
+    # Verify Running as Admin
+    if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        Write-Host "-- Restarting as Administrator" -ForegroundColor Yellow
+        Start-Sleep -Seconds 1
+
+        $exe = if ($PSVersionTable.PSEdition -eq "Core") { "pwsh.exe" } else { "powershell.exe" }
+        Start-Process $exe "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+        exit
+    }
+
+    ### START LOGGING ###
+    $runTime = $(Get-Date).ToString("MMddyy-HHmmss")
+    $fullLogPath = "$PSScriptRoot\WorkshopLog_$runTime.txt"
+    Write-Host "`nLog folder full path is $fullLogPath"
+    Start-Transcript -Path "$fullLogPath" -Append
+    $startTime = Get-Date -Format g
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $mofPath = "C:\AzLWorkshopSource\AzLWorkshop\"
 
     Write-Host "`nStarting Azure Local workshop deployment....a Remote Desktop icon on your desktop will indicate completion..." -ForegroundColor Green
     Start-Sleep -Seconds 5
-    Set-DscLocalConfigurationManager  -Path . -Force
-    Start-DscConfiguration -Path . -Wait -Force -Verbose -ErrorAction 'Stop'
+    Set-DscLocalConfigurationManager -Path $mofPath -Force
+    Start-DscConfiguration -Path $mofPath -Wait -Force -Verbose -ErrorAction 'Stop'
     Write-Host "`nDeployment complete....use the Remote Desktop icon to connect to your Domain Controller..." -ForegroundColor Green
 
     $endTime = Get-Date -Format g
@@ -466,6 +496,18 @@ try {
     Write-Host "Azure Local workshop deployment completed successfully, taking $difference." -ErrorAction SilentlyContinue
     Write-Host "You started the Azure Local workshop deployment at $startTime." -ErrorAction SilentlyContinue
     Write-Host "Azure Local workshop deployment completed at $endTime." -ErrorAction SilentlyContinue
+}
+catch {
+    Set-Location $PSScriptRoot
+    throw $_.Exception.Message
+    Write-Host "Deployment failed - follow the troubleshooting steps online, and then retry"
+    Read-Host | Out-Null
+}
+finally {
+    try { Stop-Transcript | Out-Null } catch { }
+}
+'@
+    $ps1Content | Out-File -FilePath $ps1Path -Force
 }
 catch {
     Set-Location $PSScriptRoot

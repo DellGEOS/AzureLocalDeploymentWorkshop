@@ -864,7 +864,7 @@ configuration AzLWorkshop
                 DependsOn = "[Script]Update DC"
             }
             # For each VM with a name like "AzL", create 2 vNICs and attach them to the Storage vSwitch with VLANs 711-719
-            foreach ($vm in $Using:vms) {
+            foreach ($vm in $vms) {
                 $nicNames = @("Storage1", "Storage2")
                 foreach ($nicName in $nicNames) {
                     VMNetworkAdapter "Create${nicName}NIC" {
@@ -887,7 +887,7 @@ configuration AzLWorkshop
                 DependsOn = "[Script]Update DC"
             }
             # For each VM with a name like "AzL", create 2 vNICs and attach them to the Storage vSwitches
-            foreach ($vm in $Using:vms) {
+            foreach ($vm in $vms) {
                 $nicNames = @("Storage1-2", "Storage2-1")
                 foreach ($nicName in $nicNames) {
                     VMNetworkAdapter "Create${nicName}NIC" {
