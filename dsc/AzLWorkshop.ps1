@@ -831,6 +831,9 @@ configuration AzLWorkshop
                     Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ServerManager' -Name 'DoNotPopWACConsoleAtSMLaunch' -Value 1 -Type Dword
                     # Disable Network Profile Prompt
                     New-Item -Path 'HKLM:\System\CurrentControlSet\Control\Network\NewNetworkWindowOff' -Force | Out-Null
+                    # Trigger an explorer restart to apply the wallpaper
+                    Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 5
                 }
             }
 
