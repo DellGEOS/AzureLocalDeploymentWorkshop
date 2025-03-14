@@ -100,9 +100,6 @@ configuration AzLWorkshop
         $domainAdminName = $Admincreds.UserName
         $msLabUsername = "$domainNetBios\$($Admincreds.UserName)"
         $msLabPassword = $Admincreds.GetNetworkCredential().Password
-        $secMsLabPassword = New-Object -TypeName System.Security.SecureString
-        $msLabPassword.ToCharArray() | ForEach-Object { $secMsLabPassword.AppendChar($_) }
-        $msLabCreds = New-Object -typename System.Management.Automation.PSCredential -argumentlist $msLabUsername, $secMsLabPassword
 
         if (!((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77")) {
             # If this is on-prem, user should have supplied a folder/path they wish to install into
@@ -791,7 +788,8 @@ configuration AzLWorkshop
             }
 
             SetScript  = {
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $Using:msLabCreds -ScriptBlock {
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
                     Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
                     Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
                     Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
@@ -808,15 +806,17 @@ configuration AzLWorkshop
         
         Script "Deploy WAC" {
             GetScript  = {
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 Start-Sleep -Seconds 10
-                $result = Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $Using:msLabCreds -ScriptBlock {
+                $result = Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
                     [bool] (Get-WmiObject -class win32_product  | Where-Object { $_.Name -eq "Windows Admin Center" })
                 }
                 return @{ 'Result' = $result }
             }
 
             SetScript  = {
-                Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $Using:msLabCreds -ScriptBlock {
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
                     if (-not (Test-Path -Path "C:\WindowsAdminCenter.exe")) {
                         $ProgressPreference = 'SilentlyContinue'
                         Invoke-WebRequest -Uri 'https://aka.ms/WACDownload' -OutFile "C:\WindowsAdminCenter.exe" -UseBasicParsing
@@ -860,7 +860,8 @@ configuration AzLWorkshop
         Script "Update DC" {
             GetScript  = {
                 Start-Sleep -Seconds 10
-                $result = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $Using:msLabCreds -ScriptBlock {
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                $result = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
                     if (Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object subject -like "CN=WindowsAdminCenterSelfSigned") {
                         return $true
                     }
@@ -872,7 +873,8 @@ configuration AzLWorkshop
             }
 
             SetScript  = {
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $Using:msLabCreds -ScriptBlock {
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
                     $GatewayServerName = "WAC"
                     Start-Sleep 10
                     Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/media/azlwallpaper.png' -OutFile "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -UseBasicParsing
