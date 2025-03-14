@@ -1134,7 +1134,7 @@ configuration AzLWorkshop
             }
         }
 
-        # Set VLANs for the Storage vNICs based on the azureLocalArchitecture
+        <# Set VLANs for the Storage vNICs based on the azureLocalArchitecture
         $vLANdependsOn = switch ($azureLocalArchitecture) {
             "2-Machine Non-Converged" { "[VMNetworkAdapter]$($vms[0])Storage1", "[VMNetworkAdapter]$($vms[0])Storage2", "[VMNetworkAdapter]$($vms[1])Storage1", "[VMNetworkAdapter]$($vms[1])Storage2" }
             "3-Machine Non-Converged" {
@@ -1169,8 +1169,10 @@ configuration AzLWorkshop
             }
         }
 
-        $vLANdependsOnString = ($vLANdependsOn | ForEach-Object { "'$_'" }) -join ", "
+        #$vLANdependsOnString = ($vLANdependsOn | ForEach-Object { "'$_'" }) -join ", "
 
+        #>
+        
         # Perform the SetStorageVLANs script based on the $azureLocalArchitecture
         # Not necessary if $azureLocalArchitecture is either 'Single Machine' or '*Fully-Converged'
 
@@ -1203,7 +1205,7 @@ configuration AzLWorkshop
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
-                DependsOn  = "$vLANdependsOnString", "[Script]Update DC"
+                DependsOn  = "[VMNetworkAdapter]AzLStorage1", "[VMNetworkAdapter]AzLStorage2", "[VMNetworkAdapter]AzLStorage1", "[VMNetworkAdapter]AzLStorage2", "[Script]Update DC"
             }
         }
 
