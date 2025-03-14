@@ -868,7 +868,7 @@ configuration AzLWorkshop
             foreach ($vm in $vms) {
                 VMNetworkAdapter "CreateNIC$($vm)Storage1" {
                     Id         = "$vm-Storage1-NIC"
-                    VMName     = $vmPrefix-$vm
+                    VMName     = "$vmPrefix-$vm"
                     Name       = "Storage1"
                     SwitchName = "Storage"
                     Ensure     = "Present"
@@ -876,7 +876,7 @@ configuration AzLWorkshop
                 }
                 VMNetworkAdapter "CreateNIC$($vm)Storage2" {
                     Id         = "$vm-Storage2-NIC"
-                    VMName     = $vmPrefix-$vm
+                    VMName     = "$vmPrefix-$vm"
                     Name       = "Storage2"
                     SwitchName = "Storage"
                     Ensure     = "Present"
@@ -902,7 +902,7 @@ configuration AzLWorkshop
             foreach ($vm in $vms) {
                 VMNetworkAdapter "CreateNIC$($vm)Storage1-2" {
                     Id         = "$vm-Storage1-2-NIC"
-                    VMName     = $vmPrefix-$vm
+                    VMName     = "$vmPrefix-$vm"
                     Name       = "Storage1-2"
                     SwitchName = "Storage1-2"
                     Ensure     = "Present"
@@ -910,7 +910,7 @@ configuration AzLWorkshop
                 }
                 VMNetworkAdapter "CreateNIC$($vm)Storage2-1" {
                     Id         = "$vm-Storage2-1-NIC"
-                    VMName     =  $vmPrefix-$vm
+                    VMName     = "$vmPrefix-$vm"
                     Name       = "Storage2-1"
                     SwitchName = "Storage2-1"
                     Ensure     = "Present"
@@ -1123,7 +1123,7 @@ configuration AzLWorkshop
             foreach ($machine in $machineNics) {
                 foreach ($nicName in $machine.NICs) {
                     VMNetworkAdapter "CreateNIC$($vm)$($nicName)" {
-                        Id         = "($vmPrefix-AzL$($machine.VM))-$nicName-NIC"
+                        Id         = "$vmPrefix-AzL$($machine.VM)-$nicName-NIC"
                         VMName     = "$vmPrefix-AzL$($machine.VM)"
                         Name       = $nicName
                         SwitchName = $nicName
