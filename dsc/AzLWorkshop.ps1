@@ -796,48 +796,48 @@ configuration AzLWorkshop
 
         Script "Update DC" {
             GetScript  = {
-            Start-Sleep -Seconds 10
-            $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-            $result = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
-                $wallpaperSet = (Get-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name Wallpaper -ErrorAction SilentlyContinue).Wallpaper -eq "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png"
-                $certExists = (Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object subject -like "CN=WindowsAdminCenterSelfSigned")
-                $ieEscAdminDisabled = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -ErrorAction SilentlyContinue).IsInstalled -eq 0
-                $ieEscUserDisabled = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -ErrorAction SilentlyContinue).IsInstalled -eq 0
-                $wacPromptDisabled = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ServerManager' -Name 'DoNotPopWACConsoleAtSMLaunch' -ErrorAction SilentlyContinue).DoNotPopWACConsoleAtSMLaunch -eq 1
-                $networkProfilePromptDisabled = Test-Path 'HKLM:\System\CurrentControlSet\Control\Network\NewNetworkWindowOff'
-                return ($wallpaperSet -and $certExists -and $ieEscAdminDisabled -and $ieEscUserDisabled -and $wacPromptDisabled -and $networkProfilePromptDisabled)
+                Start-Sleep -Seconds 10
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                $result = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                    $wallpaperSet = (Get-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name Wallpaper -ErrorAction SilentlyContinue).Wallpaper -eq "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png"
+                    $certExists = (Get-ChildItem Cert:\LocalMachine\Root\ | Where-Object subject -like "CN=WindowsAdminCenterSelfSigned")
+                    $ieEscAdminDisabled = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -ErrorAction SilentlyContinue).IsInstalled -eq 0
+                    $ieEscUserDisabled = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -ErrorAction SilentlyContinue).IsInstalled -eq 0
+                    $wacPromptDisabled = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ServerManager' -Name 'DoNotPopWACConsoleAtSMLaunch' -ErrorAction SilentlyContinue).DoNotPopWACConsoleAtSMLaunch -eq 1
+                    $networkProfilePromptDisabled = Test-Path 'HKLM:\System\CurrentControlSet\Control\Network\NewNetworkWindowOff'
+                    return ($wallpaperSet -and $certExists -and $ieEscAdminDisabled -and $ieEscUserDisabled -and $wacPromptDisabled -and $networkProfilePromptDisabled)
+                }
+                return @{ 'Result' = $result }
             }
-            return @{ 'Result' = $result }
-        }
 
             SetScript  = {
-            $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-            Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
-                # Update wallpaper
-                Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/media/azlwallpaper.png' -OutFile "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -UseBasicParsing
-                Set-GPPrefRegistryValue -Name "Default Domain Policy" -Context User -Action Replace -Key "HKCU\Control Panel\Desktop" -ValueName Wallpaper -Value "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -Type String
-                # Update WAC certificate
-                $GatewayServerName = "WAC"
-                Start-Sleep 10
-                $cert = Invoke-Command -ComputerName $GatewayServerName `
-                -ScriptBlock { Get-ChildItem Cert:\LocalMachine\My\ | Where-Object subject -eq "CN=WindowsAdminCenterSelfSigned" }
-                $cert | Export-Certificate -FilePath $env:TEMP\WACCert.cer
-                Import-Certificate -FilePath $env:TEMP\WACCert.cer -CertStoreLocation Cert:\LocalMachine\Root\
-                # Disable Internet Explorer ESC for Admin
-                Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Value 0 -Type Dword
-                # Disable Internet Explorer ESC for User
-                Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Value 0 -Type Dword
-                # Disable Server Manager WAC Prompt
-                Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ServerManager' -Name 'DoNotPopWACConsoleAtSMLaunch' -Value 1 -Type Dword
-                # Disable Network Profile Prompt
-                New-Item -Path 'HKLM:\System\CurrentControlSet\Control\Network\NewNetworkWindowOff' -Force | Out-Null
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                    # Update wallpaper
+                    Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/media/azlwallpaper.png' -OutFile "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -UseBasicParsing
+                    Set-GPPrefRegistryValue -Name "Default Domain Policy" -Context User -Action Replace -Key "HKCU\Control Panel\Desktop" -ValueName Wallpaper -Value "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -Type String
+                    # Update WAC certificate
+                    $GatewayServerName = "WAC"
+                    Start-Sleep 10
+                    $cert = Invoke-Command -ComputerName $GatewayServerName `
+                        -ScriptBlock { Get-ChildItem Cert:\LocalMachine\My\ | Where-Object subject -eq "CN=WindowsAdminCenterSelfSigned" }
+                    $cert | Export-Certificate -FilePath $env:TEMP\WACCert.cer
+                    Import-Certificate -FilePath $env:TEMP\WACCert.cer -CertStoreLocation Cert:\LocalMachine\Root\
+                    # Disable Internet Explorer ESC for Admin
+                    Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Value 0 -Type Dword
+                    # Disable Internet Explorer ESC for User
+                    Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Value 0 -Type Dword
+                    # Disable Server Manager WAC Prompt
+                    Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ServerManager' -Name 'DoNotPopWACConsoleAtSMLaunch' -Value 1 -Type Dword
+                    # Disable Network Profile Prompt
+                    New-Item -Path 'HKLM:\System\CurrentControlSet\Control\Network\NewNetworkWindowOff' -Force | Out-Null
+                }
             }
-        }
 
             TestScript = {
-            # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-            $state = [scriptblock]::Create($GetScript).Invoke()
-            return $state.Result
+                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
             }
             DependsOn  = "[Script]Deploy WAC"
         }
