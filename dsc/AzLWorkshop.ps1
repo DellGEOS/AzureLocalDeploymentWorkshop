@@ -605,15 +605,20 @@ configuration AzLWorkshop
                     do {
                         try {
                             Write-Host "Enabling the Hyper-V role using Install-WindowsFeature -VHD..."
-                            Get-WindowsFeature -vhd $Using:azLocalVhdPath | Where-object { $_.Name -like "*Hyper-V*" } | Install-WindowsFeature -Vhd $Using:azLocalVhdPath -ErrorAction Stop
+                            $featuresToInstall = Get-WindowsFeature -Vhd $Using:azLocalVhdPath | Where-Object { $_.Name -like "*Hyper-V*" -and $_.InstallState -ne "Installed" }
+                            if ($featuresToInstall) {
+                                $featuresToInstall | Install-WindowsFeature -Vhd $Using:azLocalVhdPath -ErrorAction Stop -Verbose
+                            }
                             break
                         }
                         catch {
                             $i++
                             Write-Host "Failed to enable Hyper-V role, retrying..."
+                            # Display the exception message from the failed attempt
+                            Write-Host $_.Exception.Message
                             Start-Sleep -Seconds 20
                         }
-                    } while ($i -lt 5)
+                    } while ($i -lt 10)
                 }
                 
                 Start-Sleep -Seconds 20
@@ -698,25 +703,24 @@ configuration AzLWorkshop
             DependsOn  = "[Script]MSLab CreateParentDisks"
         }
 
-        <# Connect to each of the vmPrefix-AzL VMs and enable the Hyper-V role and management tools
+        <#
+        # Connect to each of the vmPrefix-AzL VMs and enable the Hyper-V role and management tools
+        # Need to test if any of the features are already installed before attempting to install them
+        # $features = @("Hyper-V", "RSAT-Hyper-V-Tools", "Hyper-V-PowerShell")
         Script "Enable Hyper-V on AzL VMs" {
             GetScript  = {
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                $result = $true
-                foreach ($vm in Get-VM -Name "$Using:vmPrefix-AzL*") {
-                    $feature = Invoke-Command -VMName $vm.Name -Credential $scriptCredential -ScriptBlock {
-                        Get-WindowsFeature | Where-Object { $_.Name -like "*Hyper-V*" }
-                    }
-                    if ($feature.Installed -eq $false) {
-                        $result = $false
-                        break
-                    }
+                $hypervState = Invoke-Command -VMName "$Using:vmPrefix-AzL" -Credential $scriptCredential -ScriptBlock {
+                    @(
+                        @{ FeatureName = "Hyper-V"; Installed = (Get-WindowsOptionalFeature -Online -FeatureName "Microsoft-Hyper-V").State },
+                        @{ FeatureName = "RSAT-Hyper-V-Tools"; Installed = (Get-WindowsOptionalFeature -Online -FeatureName "RSAT-Hyper-V-Tools").State },
+                        @{ FeatureName = "Hyper-V-PowerShell"; Installed = (Get-WindowsOptionalFeature -Online -FeatureName "Hyper-V-PowerShell").State }
+                    )
                 }
-                return @{ 'Result' = $result }
+                return @{ 'Result' = $hypervState }
             }
 
             SetScript  = {
-                
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 Invoke-Command -VMName "$Using:vmPrefix-AzL" -Credential $scriptCredential -ScriptBlock {
                     $features = @("Hyper-V", "RSAT-Hyper-V-Tools", "Hyper-V-PowerShell")
