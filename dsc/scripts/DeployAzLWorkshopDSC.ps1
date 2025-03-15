@@ -37,6 +37,8 @@ try {
     Get-NetConnectionProfile | Where-Object { $_.NetworkCategory -eq "Public" } | ForEach-Object {
         Set-NetConnectionProfile -NetworkCategory Private -ErrorAction SilentlyContinue
     }
+    # Update the Execution Policy to allow for this and future scripts to run
+    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 
     # Ensure $adminCreds have been provided, and if not, prompt to collect them and break out if they don't provide them
     # Also need to ensure that the password is 12 characters long, and contains at least one of each of the following: uppercase, lowercase, number and special character.
