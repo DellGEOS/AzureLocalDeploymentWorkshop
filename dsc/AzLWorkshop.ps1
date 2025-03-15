@@ -588,41 +588,23 @@ configuration AzLWorkshop
 
                 Start-Sleep -Seconds 10
 
-                $mount = Mount-VHD -Path $Using:azLocalVhdPath -Passthru -ErrorAction Stop -Verbose
-                Start-Sleep -Seconds 2
-
-                $driveLetter = (Get-Disk -Number $mount.Number | Get-Partition | Where-Object Driveletter).DriveLetter
-                $updatepath = "$($driveLetter):\"
-                $updates = Get-ChildItem -path $Using:cuPath -Recurse | Where-Object { ($_.extension -eq ".msu") -or ($_.extension -eq ".cab") } | Select-Object fullname
-                foreach ($update in $updates) {
-                    Write-Host "Found the following update file to inject: $($update.fullname)"
-                    $command = "dism /image:" + $updatepath + " /add-package /packagepath:'" + $update.fullname + "'"
-                    Write-Host "Executing the following command: $command"
-                    Invoke-Expression $command
-                }
-
-                Write-Host "Cleaning up the image..."
-                $command = "dism /image:" + $updatepath + " /Cleanup-Image /spsuperseded"
-                Invoke-Expression $command
-
                 $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
                 if ($osInfo.ProductType -eq 1) {
+                    Mount-VHD -Path $Using:azLocalVhdPath -Passthru -ErrorAction Stop -Verbose
+                    Start-Sleep -Seconds 2
                     Write-Host "Enabling the Hyper-V role..."
                     $command = "dism /image:" + $updatepath + " /enable-Feature:Microsoft-Hyper-V"
                     Invoke-Expression $command
+                    Write-Host "Dismounting the Virtual Disk..."
+                    Dismount-VHD -path $Using:azLocalVhdPath -confirm:$false
                 }
-
-                Write-Host "Dismounting the Virtual Disk..."
-                Dismount-VHD -path $Using:azLocalVhdPath -confirm:$false
-
-                Start-Sleep -Seconds 5
-
-                # Enable Hyper-V role on the Azure Local Host Image
-                $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
-                if ($osInfo.ProductType -eq 3) {
+                elseif ($osInfo.ProductType -eq 3) {
+                    # From a Windows Server host (local or in Azure) enable Hyper-V role on the Azure Local Host Image
+                    # No need to mount the VHD, as the Install-WindowsFeature cmdlet can install roles and features on offline VHDs
                     Write-Host "Enabling the Hyper-V role..."
                     Install-WindowsFeature -Vhd $Using:azLocalVhdPath -Name Hyper-V
                 }
+                Start-Sleep -Seconds 5
 
                 # Remove the scratch folder
                 Remove-Item -Path "$scratchPath" -Recurse -Force | Out-Null
