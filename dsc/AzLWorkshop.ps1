@@ -586,7 +586,8 @@ configuration AzLWorkshop
                         -VHDFormat VHDX -VHDType Dynamic -VHDPartitionStyle GPT -TempDirectory $Using:scratchPath -Verbose
                 }
 
-                Start-Sleep -Seconds 10
+                Write-Host "Sleeping for 30 seconds to allow for VHD to be dismounted..."
+                Start-Sleep -Seconds 30
 
                 $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
                 if ($osInfo.ProductType -eq 1) {
@@ -601,10 +602,11 @@ configuration AzLWorkshop
                 elseif ($osInfo.ProductType -eq 3) {
                     # From a Windows Server host (local or in Azure) enable Hyper-V role on the Azure Local Host Image
                     # No need to mount the VHD, as the Install-WindowsFeature cmdlet can install roles and features on offline VHDs
-                    Write-Host "Enabling the Hyper-V role..."
-                    Install-WindowsFeature -Vhd $Using:azLocalVhdPath -Name Hyper-V
+                    Write-Host "Enabling the Hyper-V role using Install-WindowsFeature -Vhd..."
+                    Install-WindowsFeature -Vhd $Using:azLocalVhdPath -Name Hyper-V -ErrorAction Stop
                 }
-                Start-Sleep -Seconds 5
+                
+                Start-Sleep -Seconds 20
 
                 # Remove the scratch folder
                 Remove-Item -Path "$scratchPath" -Recurse -Force | Out-Null
