@@ -219,13 +219,13 @@ try {
 
     if (!($updateImages)) {
         while ($updateInput -notin ("Y", "N", "Q")) {
-            $updateInput = Read-Host "`nDo you wish to update your Azure Local and Windows Server images automatically?`nThis will increase deployment time. Enter Y or N (or Q to exit)..."
+            $updateInput = Read-Host "`nDo you wish to update your Windows Server images automatically?`nThis will increase deployment time. Enter Y or N (or Q to exit)..."
             if ($updateInput -eq "Y") {
-                Write-Host "`nYou have chosen to update your images that are created during this process.`nThis will add additional time, but your images will have the latest patches." -ForegroundColor Green
+                Write-Host "`nYou have chosen to update your Windows Server images that are created during this process.`nThis will add additional time, but your images will have the latest patches." -ForegroundColor Green
                 $updateImages = "Yes"
             }
             elseif ($updateInput -eq "N") {
-                Write-Host "`nYou have chosen not to update your images - you can patch VMs once they've been deployed." -ForegroundColor Yellow
+                Write-Host "`nYou have chosen not to update your images - you can patch your Windows Server VMs once they've been deployed." -ForegroundColor Yellow
                 $updateImages = "No"
             }
             elseif ($updateInput -eq "Q") {
@@ -239,10 +239,10 @@ try {
         }
     }
     elseif ($updateImages -eq "Yes") {
-        Write-Host "`nYou have chosen to update your images that are created during this process.`nThis will add additional time, but your images will have the latest patches." -ForegroundColor Green
+        Write-Host "`nYou have chosen to update your Windows Server images that are created during this process.`nThis will add additional time, but your images will have the latest patches." -ForegroundColor Green
     }
     elseif ($updateImages -eq "No") {
-        Write-Host "`nYou have chosen not to update your images - you can patch VMs once they've been deployed." -ForegroundColor Yellow
+        Write-Host "`nYou have chosen not to update your images - you can patch your Windows Server VMs once they've been deployed." -ForegroundColor Yellow
     }
     elseif ($updateImages -notin ("Y", "N")) {
         Write-Host "Invalid entry for -updateImages.`nPlease re-run the script with either Yes or No." -ForegroundColor Red
