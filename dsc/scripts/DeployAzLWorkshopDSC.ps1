@@ -453,11 +453,13 @@ try {
     Write-Host "Azure Local workshop deployment completed successfully, taking $difference." -ErrorAction SilentlyContinue
     Write-Host "You started the Azure Local workshop deployment at $startTime." -ErrorAction SilentlyContinue
     Write-Host "Azure Local workshop deployment completed at $endTime." -ErrorAction SilentlyContinue
+    Read-Host -Prompt "Press Enter to exit"
 }
 catch {
     Set-Location $PSScriptRoot
     throw $_.Exception.Message
     Write-Host "Deployment failed - follow the troubleshooting steps online, and then retry"
+    Read-Host -Prompt "Press Enter to exit"
     Read-Host | Out-Null
 }
 finally {
