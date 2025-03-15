@@ -740,8 +740,6 @@ configuration AzLWorkshop
                             }
                         }
                     }
-                    # Disable Time Sync for VM
-                    Set-VMIntegrationService -VMName $vm -Name "Time Synchronization" -Enabled $false
                 }
             }
             TestScript = {
