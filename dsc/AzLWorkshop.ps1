@@ -692,54 +692,56 @@ configuration AzLWorkshop
                 return @{ 'Result' = $result }
             }
             SetScript  = {
+                Write-Host "Starting AzL Hyper-V Tools SetScript..."
                 $vms = (Get-VM | Where-Object { $_.Name -like "$Using:vmPrefix-AzL*" }).Name
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 foreach ($vm in $vms) {
-                    Invoke-Command -VMName $vm -Credential $scriptCredential -ScriptBlock {
-                        Write-Host "SetScript: Checking for missing Hyper-V management features on $Using:vm..."
+                    Invoke-Command -VMName $vm -Credential $scriptCredential -ScriptBlock -argumentlist $vm {
+                        param($vm)
+                        Write-Host "SetScript: Checking for missing Hyper-V management features on $vm..."
                         ($HyperVToolsCheck) = Get-WindowsFeature -Name "*Hyper-V-Tools*" | Where-Object { $_.InstallState -eq "Available" }
                         if ($HyperVToolsCheck) {
                             Write-Host "The following Hyper-V management features are missing on $vm and will now be installed"
-                            Write-Host "$($feature.Name)"
+                            Write-Host "$($HyperVToolsCheck.Name)"
                             $attempts = 0
                             $maxAttempts = 5
                             do {
                                 try {
-                                    Write-Host "Installing $($feature.Name) on $Using:vm... (Attempt $($attempts + 1) of $maxAttempts)"
-                                    $installResult = Install-WindowsFeature -Name $($feature.Name) -ErrorAction Stop -Confirm:$false
+                                    Write-Host "Installing $($HyperVToolsCheck.Name) on $vm... (Attempt $($attempts + 1) of $maxAttempts)"
+                                    $installResult = Install-WindowsFeature -Name $($HyperVToolsCheck.Name) -ErrorAction Stop -Confirm:$false -Verbose
                                     if ($installResult.Success) {
-                                        Write-Host "$($feature.Name) installed successfully on $Using:vm."
+                                        Write-Host "$($HyperVToolsCheck.Name) installed successfully on $vm."
                                         break
                                     }
                                 }
                                 catch {
-                                    Write-Host "Failed to install $($feature.Name) on $Using:vm. Attempt $($attempts + 1) of $maxAttempts."
+                                    Write-Host "Failed to install $($HyperVToolsCheck.Name) on $vm. Attempt $($attempts + 1) of $maxAttempts."
                                     Start-Sleep -Seconds 20
                                 }
                                 $attempts++
                             } while ($attempts -lt $maxAttempts)
 
                             if (-not $installResult.Success) {
-                                $featuresToInstall = ((Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -eq "RSAT-Hyper-V-Tools-Feature" -or $_.FeatureName -eq "Microsoft-Hyper-V-Management-PowerShell" }) | Where-Object { $_.State -eq "Disabled" })
-                                foreach ($feature in $featuresToInstall) {
-                                    $attempts = 0
-                                    do {
-                                        try {
-                                            Write-Host "Enabling $($feature.FeatureName) on $Using:vm... (Attempt $($attempts + 1) of $maxAttempts)"
-                                            Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
-                                            Write-Host "$($feature.FeatureName) enabled successfully on $Using:vm."
-                                            break
-                                        }
-                                        catch {
-                                            Write-Host "Failed to enable $($feature.FeatureName) on $Using:vm. Attempt $($attempts + 1) of $maxAttempts."
-                                            Start-Sleep -Seconds 20
-                                        }
-                                        $attempts++
-                                    } while ($attempts -lt $maxAttempts)
-                                }
+                                $HyperVToolsCheck = ((Get-WindowsOptionalFeature -Online -FeatureName "RSAT-Hyper-V-Tools-Feature" | Where-Object { $_.State -eq "Disabled" }))
+                                $attempts = 0
+                                do {
+                                    try {
+                                        Write-Host "Enabling $($HyperVToolsCheck.FeatureName) on $vm... (Attempt $($attempts + 1) of $maxAttempts)"
+                                        Enable-WindowsOptionalFeature -Online -FeatureName $($HyperVToolsCheck.FeatureName) -All -Verbose -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
+                                        Write-Host "$($HyperVToolsCheck.FeatureName) enabled successfully on $vm."
+                                        break
+                                    }
+                                    catch {
+                                        Write-Host "Failed to enable $($HyperVToolsCheck.FeatureName) on $vm. Attempt $($attempts + 1) of $maxAttempts."
+                                        Start-Sleep -Seconds 20
+                                    }
+                                    $attempts++
+                                } while ($attempts -lt $maxAttempts)
                             }
                         }
                     }
+                    # Disable Time Sync for VM
+                    Set-VMIntegrationService -VMName $vm -Name "Time Synchronization" -Enabled $false
                 }
             }
             TestScript = {
