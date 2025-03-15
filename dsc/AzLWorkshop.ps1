@@ -564,7 +564,7 @@ configuration AzLWorkshop
 
         Script "CreateAzLocalDisk" {
             GetScript  = {
-                $result = Test-Path -Path $Using:azLocalVhdPath -and Test-Path -Path "$Using:flagsPath\AzLVhdComplete.txt"
+                $result = (Test-Path -Path $Using:azLocalVhdPath) -and (Test-Path -Path "$Using:flagsPath\AzLVhdComplete.txt")
                 return @{ 'Result' = $result }
             }
 
