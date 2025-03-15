@@ -657,8 +657,8 @@ configuration AzLWorkshop
                 .\Deploy.ps1
                 $deployFlag = "$Using:flagsPath\DeployComplete.txt"
                 New-Item $deployFlag -ItemType file -Force
-                Write-Host "Sleeping for 2 minutes to allow for VMs to join domain and reboot as required"
-                Start-Sleep -Seconds 120
+                Write-Host "Sleeping for 4 minutes to allow for AzL nested hosts to reboot as required"
+                Start-Sleep -Seconds 240
             }
 
             TestScript = {
@@ -671,15 +671,17 @@ configuration AzLWorkshop
                 
         Script "AzL Hyper-V Tools" {
             GetScript  = {
+                Write-Host "Starting AzL Hyper-V Tools GetScript Test..."
                 # Loop through AzL VMs and test if Hyper-V management features are installed
-                $vms = Get-VM | Where-Object { $_.Name -like "$Using:vmPrefix-AzL*" }
+                $vms = (Get-VM | Where-Object { $_.Name -like "$Using:vmPrefix-AzL*" }).Name
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 foreach ($vm in $vms) {
-                    $vmName = $($vm.Name)
-                    $featureCheck = Invoke-Command -VMName $vmName -Credential $scriptCredential -ScriptBlock {
-                        Get-WindowsFeature -Name "*Hyper-V*" | Where-Object { $_.InstallState -eq "Available" }
+                    $HyperVToolsCheck = Invoke-Command -VMName $vm -Credential $scriptCredential -ScriptBlock {
+                        Get-WindowsFeature -Name "*Hyper-V-Tools*" | Where-Object { $_.InstallState -eq "Available" }
                     }
-                    if ($featureCheck) {
+                    if ($HyperVToolsCheck) {
+                        Write-Host "The following Hyper-V management features are missing on $vm"
+                        Write-Host "$($feature.Name)"
                         $result = $false
                         break
                     }
@@ -690,21 +692,50 @@ configuration AzLWorkshop
                 return @{ 'Result' = $result }
             }
             SetScript  = {
-                $vms = Get-VM | Where-Object { $_.Name -like "$Using:vmPrefix-AzL*" }
+                $vms = (Get-VM | Where-Object { $_.Name -like "$Using:vmPrefix-AzL*" }).Name
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 foreach ($vm in $vms) {
-                    $vmName = $($vm.Name)
-                    Invoke-Command -VMName "$vmName" -Credential $scriptCredential -ScriptBlock {
-                        Write-Host "Checking for missing Hyper-V management features on $Using:vmName..."
-                        $featuresToInstall = Get-WindowsFeature -Name "*Hyper-V*" | Where-Object { $_.InstallState -eq "Available" }
-                        foreach ($feature in $featuresToInstall) {
-                            Write-Host "Installing $($feature.Name) on $Using:vmName..."
-                            $installResult = Install-WindowsFeature -Name $($feature.Name) -ErrorAction SilentlyContinue -Confirm:$false
+                    Invoke-Command -VMName $vm -Credential $scriptCredential -ScriptBlock {
+                        Write-Host "SetScript: Checking for missing Hyper-V management features on $Using:vm..."
+                        ($HyperVToolsCheck) = Get-WindowsFeature -Name "*Hyper-V-Tools*" | Where-Object { $_.InstallState -eq "Available" }
+                        if ($HyperVToolsCheck) {
+                            Write-Host "The following Hyper-V management features are missing on $vm and will now be installed"
+                            Write-Host "$($feature.Name)"
+                            $attempts = 0
+                            $maxAttempts = 5
+                            do {
+                                try {
+                                    Write-Host "Installing $($feature.Name) on $Using:vm... (Attempt $($attempts + 1) of $maxAttempts)"
+                                    $installResult = Install-WindowsFeature -Name $($feature.Name) -ErrorAction Stop -Confirm:$false
+                                    if ($installResult.Success) {
+                                        Write-Host "$($feature.Name) installed successfully on $Using:vm."
+                                        break
+                                    }
+                                }
+                                catch {
+                                    Write-Host "Failed to install $($feature.Name) on $Using:vm. Attempt $($attempts + 1) of $maxAttempts."
+                                    Start-Sleep -Seconds 20
+                                }
+                                $attempts++
+                            } while ($attempts -lt $maxAttempts)
+
                             if (-not $installResult.Success) {
                                 $featuresToInstall = ((Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -eq "RSAT-Hyper-V-Tools-Feature" -or $_.FeatureName -eq "Microsoft-Hyper-V-Management-PowerShell" }) | Where-Object { $_.State -eq "Disabled" })
                                 foreach ($feature in $featuresToInstall) {
-                                    Write-Host "Enabling $($feature.FeatureName) on $Using:vmName..."
-                                    Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
+                                    $attempts = 0
+                                    do {
+                                        try {
+                                            Write-Host "Enabling $($feature.FeatureName) on $Using:vm... (Attempt $($attempts + 1) of $maxAttempts)"
+                                            Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
+                                            Write-Host "$($feature.FeatureName) enabled successfully on $Using:vm."
+                                            break
+                                        }
+                                        catch {
+                                            Write-Host "Failed to enable $($feature.FeatureName) on $Using:vm. Attempt $($attempts + 1) of $maxAttempts."
+                                            Start-Sleep -Seconds 20
+                                        }
+                                        $attempts++
+                                    } while ($attempts -lt $maxAttempts)
                                 }
                             }
                         }
