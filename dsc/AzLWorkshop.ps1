@@ -675,9 +675,9 @@ configuration AzLWorkshop
                 # Loop through AzL VMs and test if Hyper-V management features are installed
                 $vms = Get-VM | Where-Object { $_.Name -like "$Using:vmPrefix-AzL*" }
                 foreach ($vm in $vms) {
-                    $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                    $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                     $featureCheck = Invoke-Command -VMName "$($vm.Name)" -Credential $scriptCredential -ScriptBlock {
-                        Get-WindowsFeature -Name *Hyper-V* | Where-Object { $_.InstallState -eq "Available" }
+                        Get-WindowsFeature -Name "*Hyper-V*" | Where-Object { $_.InstallState -eq "Available" }
                     }
                     if ($featureCheck) {
                         $result = $false
@@ -691,17 +691,17 @@ configuration AzLWorkshop
             }
             SetScript  = {
                 $vms = Get-VM | Where-Object { $_.Name -like "$Using:vmPrefix-AzL*" }
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 foreach ($vm in $vms) {
-                    $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                     Invoke-Command -VMName "$($vm.Name)" -Credential $scriptCredential -ScriptBlock {
-                        $vmName = $($Using:vm.Name)
+                        $vmName = $Using:vm.Name
                         Write-Host "Checking for missing Hyper-V management features on $vmName..."
-                        $featuresToInstall = Get-WindowsFeature -Name *Hyper-V* | Where-Object { $_.InstallState -eq "Available" }
+                        $featuresToInstall = Get-WindowsFeature -Name "*Hyper-V*" | Where-Object { $_.InstallState -eq "Available" }
                         #$featuresToInstall = ((Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -eq "RSAT-Hyper-V-Tools-Feature" -or $_.FeatureName -eq "Microsoft-Hyper-V-Management-PowerShell" }) | Where-Object { $_.State -eq "Disabled" })
                         foreach ($feature in $featuresToInstall) {
                             Write-Host "Installing $($feature.Name) on $vmName..."
                             $installResult = Install-WindowsFeature -Name $($feature.Name) -ErrorAction SilentlyContinue -Confirm:$false
-                            if ($installResult.ExitCode -eq "failed") {
+                            if (-not $installResult.Success) {
                                 Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
                             }
                         }

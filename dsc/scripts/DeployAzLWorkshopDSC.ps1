@@ -413,9 +413,8 @@ try {
     # Create a PS1 file that will be placed on the current user's desktop
     $ps1Path = "$env:USERPROFILE\Desktop\AzureLocalWorkshop.ps1"
     $ps1Content = @'
-$Global:VerbosePreference = 'SilentlyContinue'
-$Global:ProgressPreference = 'SilentlyContinue'
-try { Stop-Transcript | Out-Null } catch { }
+$VerbosePreference = 'SilentlyContinue'
+$ProgressPreference = 'SilentlyContinue'
 try {
 
     # Verify Running as Admin
@@ -424,23 +423,30 @@ try {
         Start-Sleep -Seconds 1
 
         $exe = if ($PSVersionTable.PSEdition -eq "Core") { "pwsh.exe" } else { "powershell.exe" }
-        Start-Process $exe "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+        Start-Process $exe -ArgumentList "-NoExit", "-NoProfile", "-ExecutionPolicy Bypass", "-File `"$PSCommandPath`"" -Verb RunAs
         exit
     }
 
     ### START LOGGING ###
     $runTime = $(Get-Date).ToString("MMddyy-HHmmss")
-    $fullLogPath = "$PSScriptRoot\WorkshopLog_$runTime.txt"
+    $fullLogPath = Join-Path -Path $PSScriptRoot -ChildPath "WorkshopLog_$runTime.txt"
     Write-Host "`nLog folder full path is $fullLogPath"
-    Start-Transcript -Path "$fullLogPath" -Append
     $startTime = Get-Date -Format g
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $mofPath = "C:\AzLWorkshopSource\AzLWorkshop\"
 
+    Start-Transcript -Path "$fullLogPath" -Append
+
     Write-Host "`nStarting Azure Local workshop deployment....a Remote Desktop icon on your desktop will indicate completion..." -ForegroundColor Green
     Start-Sleep -Seconds 5
     Set-DscLocalConfigurationManager -Path $mofPath -Force
-    Start-DscConfiguration -Path $mofPath -Wait -Force -Verbose -ErrorAction 'Stop'
+    try {
+        Start-DscConfiguration -Path $mofPath -Wait -Force -Verbose -ErrorAction Stop
+    }
+    catch {
+        Write-Host "Error occurred during Start-DscConfiguration: $_" -ForegroundColor Red
+        throw
+    }
     Write-Host "`nDeployment complete....use the Remote Desktop icon to connect to your Domain Controller..." -ForegroundColor Green
 
     $endTime = Get-Date -Format g
@@ -450,17 +456,16 @@ try {
     $Secs = $sw.Elapsed.Seconds
     $difference = '{0:00}h:{1:00}m:{2:00}s' -f $Hrs, $Mins, $Secs
 
-    Write-Host "Azure Local workshop deployment completed successfully, taking $difference." -ErrorAction SilentlyContinue
-    Write-Host "You started the Azure Local workshop deployment at $startTime." -ErrorAction SilentlyContinue
-    Write-Host "Azure Local workshop deployment completed at $endTime." -ErrorAction SilentlyContinue
+    Write-Host "Azure Local workshop deployment completed successfully, taking $difference."
+    Write-Host "You started the Azure Local workshop deployment at $startTime."
+    Write-Host "Azure Local workshop deployment completed at $endTime."
     Read-Host -Prompt "Press Enter to exit"
 }
 catch {
     Set-Location $PSScriptRoot
+    throw $_
     throw $_.Exception.Message
-    Write-Host "Deployment failed - follow the troubleshooting steps online, and then retry"
     Read-Host -Prompt "Press Enter to exit"
-    Read-Host | Out-Null
 }
 finally {
     try { Stop-Transcript | Out-Null } catch { }
