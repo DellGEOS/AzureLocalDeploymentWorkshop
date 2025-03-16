@@ -681,7 +681,7 @@ configuration AzLWorkshop
                     }
                     if ($HyperVToolsCheck) {
                         Write-Host "The following Hyper-V management features are missing on $vm"
-                        Write-Host "$($feature.Name)"
+                        Write-Host "$($HyperVToolsCheck.Name)"
                         $result = $false
                         break
                     }
@@ -696,26 +696,26 @@ configuration AzLWorkshop
                 $vms = (Get-VM | Where-Object { $_.Name -like "$Using:vmPrefix-AzL*" }).Name
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 foreach ($vm in $vms) {
-                    Invoke-Command -VMName $vm -Credential $scriptCredential -ScriptBlock -argumentlist $vm {
-                        param($vm)
-                        Write-Host "SetScript: Checking for missing Hyper-V management features on $vm..."
+                    Invoke-Command -VMName $vm -Credential $scriptCredential -ScriptBlock {
+                        $scriptVM = "$Using:vm"
+                        Write-Host "SetScript: Checking for missing Hyper-V management features on $scriptVM..."
                         ($HyperVToolsCheck) = Get-WindowsFeature -Name "*Hyper-V-Tools*" | Where-Object { $_.InstallState -eq "Available" }
                         if ($HyperVToolsCheck) {
-                            Write-Host "The following Hyper-V management features are missing on $vm and will now be installed"
+                            Write-Host "The following Hyper-V management features are missing on $scriptVM and will now be installed"
                             Write-Host "$($HyperVToolsCheck.Name)"
                             $attempts = 0
                             $maxAttempts = 5
                             do {
                                 try {
-                                    Write-Host "Installing $($HyperVToolsCheck.Name) on $vm... (Attempt $($attempts + 1) of $maxAttempts)"
+                                    Write-Host "Installing $($HyperVToolsCheck.Name) on $scriptVM... (Attempt $($attempts + 1) of $maxAttempts)"
                                     $installResult = Install-WindowsFeature -Name $($HyperVToolsCheck.Name) -ErrorAction Stop -Confirm:$false -Verbose
                                     if ($installResult.Success) {
-                                        Write-Host "$($HyperVToolsCheck.Name) installed successfully on $vm."
+                                        Write-Host "$($HyperVToolsCheck.Name) installed successfully on $scriptVM."
                                         break
                                     }
                                 }
                                 catch {
-                                    Write-Host "Failed to install $($HyperVToolsCheck.Name) on $vm. Attempt $($attempts + 1) of $maxAttempts."
+                                    Write-Host "Failed to install $($HyperVToolsCheck.Name) on $scriptVM. Attempt $($attempts + 1) of $maxAttempts."
                                     Start-Sleep -Seconds 20
                                 }
                                 $attempts++
@@ -726,13 +726,13 @@ configuration AzLWorkshop
                                 $attempts = 0
                                 do {
                                     try {
-                                        Write-Host "Enabling $($HyperVToolsCheck.FeatureName) on $vm... (Attempt $($attempts + 1) of $maxAttempts)"
+                                        Write-Host "Enabling $($HyperVToolsCheck.FeatureName) on $scriptVM... (Attempt $($attempts + 1) of $maxAttempts)"
                                         Enable-WindowsOptionalFeature -Online -FeatureName $($HyperVToolsCheck.FeatureName) -All -Verbose -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
-                                        Write-Host "$($HyperVToolsCheck.FeatureName) enabled successfully on $vm."
+                                        Write-Host "$($HyperVToolsCheck.FeatureName) enabled successfully on $scriptVM."
                                         break
                                     }
                                     catch {
-                                        Write-Host "Failed to enable $($HyperVToolsCheck.FeatureName) on $vm. Attempt $($attempts + 1) of $maxAttempts."
+                                        Write-Host "Failed to enable $($HyperVToolsCheck.FeatureName) on $scriptVM. Attempt $($attempts + 1) of $maxAttempts."
                                         Start-Sleep -Seconds 20
                                     }
                                     $attempts++
