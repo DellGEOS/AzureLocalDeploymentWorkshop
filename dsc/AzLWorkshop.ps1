@@ -657,8 +657,8 @@ configuration AzLWorkshop
                 .\Deploy.ps1
                 $deployFlag = "$Using:flagsPath\DeployComplete.txt"
                 New-Item $deployFlag -ItemType file -Force
-                Write-Host "Sleeping for 4 minutes to allow for AzL nested hosts to reboot as required"
-                Start-Sleep -Seconds 240
+                Write-Host "Sleeping for 2 minutes to allow for AzL nested hosts to reboot as required"
+                Start-Sleep -Seconds 120
             }
 
             TestScript = {
@@ -667,87 +667,6 @@ configuration AzLWorkshop
                 return $state.Result
             }
             DependsOn  = "[Script]MSLab CreateParentDisks"
-        }
-                
-        Script "AzL Hyper-V Tools" {
-            GetScript  = {
-                Write-Host "Starting AzL Hyper-V Tools GetScript Test..."
-                # Loop through AzL VMs and test if Hyper-V management features are installed
-                $vms = (Get-VM | Where-Object { $_.Name -like "$Using:vmPrefix-AzL*" }).Name
-                $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                foreach ($vm in $vms) {
-                    $HyperVToolsCheck = Invoke-Command -VMName $vm -Credential $scriptCredential -ScriptBlock {
-                        Get-WindowsFeature -Name "*Hyper-V-Tools*" | Where-Object { $_.InstallState -eq "Available" }
-                    }
-                    if ($HyperVToolsCheck) {
-                        Write-Host "The following Hyper-V management features are missing on $vm"
-                        Write-Host "$($HyperVToolsCheck.Name)"
-                        $result = $false
-                        break
-                    }
-                    else {
-                        $result = $true
-                    }
-                }
-                return @{ 'Result' = $result }
-            }
-            SetScript  = {
-                Write-Host "Starting AzL Hyper-V Tools SetScript..."
-                $vms = (Get-VM | Where-Object { $_.Name -like "$Using:vmPrefix-AzL*" }).Name
-                $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                foreach ($vm in $vms) {
-                    Invoke-Command -VMName $vm -Credential $scriptCredential -ScriptBlock {
-                        $scriptVM = "$Using:vm"
-                        Write-Host "SetScript: Checking for missing Hyper-V management features on $scriptVM..."
-                        ($HyperVToolsCheck) = Get-WindowsFeature -Name "*Hyper-V-Tools*" | Where-Object { $_.InstallState -eq "Available" }
-                        if ($HyperVToolsCheck) {
-                            Write-Host "The following Hyper-V management features are missing on $scriptVM and will now be installed"
-                            Write-Host "$($HyperVToolsCheck.Name)"
-                            $attempts = 0
-                            $maxAttempts = 5
-                            do {
-                                try {
-                                    Write-Host "Installing $($HyperVToolsCheck.Name) on $scriptVM... (Attempt $($attempts + 1) of $maxAttempts)"
-                                    $installResult = Install-WindowsFeature -Name $($HyperVToolsCheck.Name) -ErrorAction Stop -Confirm:$false -Verbose
-                                    if ($installResult.Success) {
-                                        Write-Host "$($HyperVToolsCheck.Name) installed successfully on $scriptVM."
-                                        break
-                                    }
-                                }
-                                catch {
-                                    Write-Host "Failed to install $($HyperVToolsCheck.Name) on $scriptVM. Attempt $($attempts + 1) of $maxAttempts."
-                                    Start-Sleep -Seconds 20
-                                }
-                                $attempts++
-                            } while ($attempts -lt $maxAttempts)
-
-                            if (-not $installResult.Success) {
-                                $HyperVToolsCheck = ((Get-WindowsOptionalFeature -Online -FeatureName "RSAT-Hyper-V-Tools-Feature" | Where-Object { $_.State -eq "Disabled" }))
-                                $attempts = 0
-                                do {
-                                    try {
-                                        Write-Host "Enabling $($HyperVToolsCheck.FeatureName) on $scriptVM... (Attempt $($attempts + 1) of $maxAttempts)"
-                                        Enable-WindowsOptionalFeature -Online -FeatureName $($HyperVToolsCheck.FeatureName) -All -Verbose -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
-                                        Write-Host "$($HyperVToolsCheck.FeatureName) enabled successfully on $scriptVM."
-                                        break
-                                    }
-                                    catch {
-                                        Write-Host "Failed to enable $($HyperVToolsCheck.FeatureName) on $scriptVM. Attempt $($attempts + 1) of $maxAttempts."
-                                        Start-Sleep -Seconds 20
-                                    }
-                                    $attempts++
-                                } while ($attempts -lt $maxAttempts)
-                            }
-                        }
-                    }
-                }
-            }
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
-            }
-            DependsOn  = "[Script]MSLab DeployEnvironment"
         }
 
         if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
@@ -786,7 +705,7 @@ configuration AzLWorkshop
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
-            DependsOn  = "[Script]AzL Hyper-V Tools"
+            DependsOn  = "[Script]MSLab DeployEnvironment"
         }
         
         Script "Deploy WAC" {
@@ -1289,7 +1208,7 @@ configuration AzLWorkshop
                 $vmIpAddress = (Get-VMNetworkAdapter -Name 'Internet' -VMName "$Using:vmPrefix-DC").IpAddresses | Where-Object { $_ -notmatch ':' }
                 $rdpConfigFile = Get-Content -Path "$Using:rdpConfigPath"
                 $rdpConfigFile = $rdpConfigFile.Replace("<<VM_IP_Address>>", $vmIpAddress)
-                $rdpConfigFile = $rdpConfigFile.Replace("<<rdpUserName>>", $msLabUsername)
+                $rdpConfigFile = $rdpConfigFile.Replace("<<rdpUserName>>", $Using:msLabUsername)
                 Out-File -FilePath "$Using:rdpConfigPath" -InputObject $rdpConfigFile -Force
             }
 
