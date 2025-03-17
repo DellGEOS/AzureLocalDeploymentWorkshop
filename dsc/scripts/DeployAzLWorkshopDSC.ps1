@@ -410,7 +410,7 @@ try {
 
     AzLWorkshop -workshopPath $workshopPath -azureLocalArchitecture $azureLocalArchitecture -adminCreds $adminCreds -domainName $domainName `
         -azureLocalMachineMemory $azureLocalMachineMemory -telemetryLevel $telemetryLevel -updateImages $updateImages `
-        -WindowsServerIsoPath $WindowsServerIsoPath -AzureLocalIsoPath $AzureLocalIsoPath -customDNSForwarders $customDNSForwarders -Verbose
+        -WindowsServerIsoPath $WindowsServerIsoPath -AzureLocalIsoPath $AzureLocalIsoPath -customDNSForwarders $customDNSForwarders
 
     # Create a PS1 file that will be placed on the current user's desktop
     $ps1Path = "$env:USERPROFILE\Desktop\AzureLocalWorkshop.ps1"
