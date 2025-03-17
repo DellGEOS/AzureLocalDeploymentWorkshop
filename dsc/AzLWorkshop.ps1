@@ -740,12 +740,12 @@ configuration AzLWorkshop
                             } while (Test-Path -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue)
         
                             # Repeat for Uninstall log file
+                            Write-Host "Checking to see if WindowsAdminCenter.log exists before cleaning up - may be locked due to ongoing installation. Waiting 20 seconds and trying again..."
                             do {
                                 if (Test-Path -Path "C:\WACUninstall.log" -ErrorAction SilentlyContinue) {
                                     Remove-Item -Path "C:\WACUninstall.log" -Force -ErrorAction SilentlyContinue
+                                    Start-Sleep -Seconds 20
                                 }
-                                Write-Host "Cannot cleanup Windows Admin Center uninstall log file - may be locked due to ongoing uninstallation. Waiting 20 seconds and trying again..."
-                                Start-Sleep -Seconds 20
                             } while (Test-Path -Path "C:\WACUninstall.log" -ErrorAction SilentlyContinue)
         
                             if (-not (Test-Path -Path "C:\WindowsAdminCenter.exe")) {
@@ -796,7 +796,7 @@ configuration AzLWorkshop
                         catch {
                             Write-Host "Installation failed. Attempting to uninstall and retry. Retry count: $($retryCount + 1)"
                             # Search for Uninstall exe in C:\Program Files\WindowsAdminCenter\
-                            $uninstallPath = Get-ChildItem -Path "C:\Program Files\WindowsAdminCenter\" -Filter "unins*.exe" -ErrorAction SilentlyContinue
+                            $uninstallPath = Get-ChildItem -Path "C:\Program Files\WindowsAdminCenter\" -Filter "unins*.exe" -ErrorAction SilentlyContinue | Select-Object -Last 1
                             if ($uninstallPath) {
                                 Start-Process -FilePath $uninstallPath.FullName -ArgumentList '/VERYSILENT /log=C:\WACUninstall.log'
                                 Start-Sleep -seconds 30
