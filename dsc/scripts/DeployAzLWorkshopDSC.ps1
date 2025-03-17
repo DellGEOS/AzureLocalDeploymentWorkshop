@@ -19,8 +19,8 @@ param
     [String]$dnsForwarders
 )
 
-$Global:VerbosePreference = 'SilentlyContinue'
-$Global:ProgressPreference = 'SilentlyContinue'
+$VerbosePreference = 'SilentlyContinue'
+$ProgressPreference = 'SilentlyContinue'
 try { Stop-Transcript | Out-Null } catch { }
 
 try {
@@ -64,9 +64,9 @@ try {
         $pattern = "^(?!:\/\/)(?!-)([a-zA-Z0-9-_]+\.)?[a-zA-Z0-9][a-zA-Z0-9-_]+\.[a-zA-Z]{2,11}?$"
         $retryCount = 0
         do {
-            Write-Host "`nPlease provide the domain name for the Azure Local workshop environment."
+            Write-Host "Please provide the domain name for the Azure Local workshop environment."
             Write-Host "The domain name should be in the format azl.lab, or corp.azl.lab. A maximum of a single subdomain is supported."
-            $domainName = Read-Host "`nEnter the domain name for the Azure Local workshop environment"
+            $domainName = Read-Host "Enter the domain name for the Azure Local workshop environment"
             $domainName = $domainName -replace '\s', ''
             if ($domainName -notmatch $pattern) {
                 Write-Host "Invalid domain name, please try again" -ForegroundColor Yellow
@@ -84,7 +84,7 @@ try {
         $pattern = "^(?!:\/\/)(?!-)([a-zA-Z0-9-_]+\.)?[a-zA-Z0-9][a-zA-Z0-9-_]+\.[a-zA-Z]{2,11}?$"
         if ($domainName -notmatch $pattern) {
             Write-Host "Invalid domain name provided. Please try again." -ForegroundColor Yellow
-            $domainName = Read-Host "`nEnter the domain name for the Azure Local workshop environment"
+            $domainName = Read-Host "Enter the domain name for the Azure Local workshop environment"
             $domainName = $domainName -replace '\s', ''
             if ($domainName -notmatch $pattern) {
                 Write-Host "Invalid domain name provided. Exiting..." -ForegroundColor Red
@@ -101,7 +101,7 @@ try {
     # Need to validate if $azureLocalArchitecture has been provided and that it meets one of the supported values
     if (!($azureLocalArchitecture)) {
         $askForArchitecture = {
-            Write-Host "`nPlease select the Azure Local architecture you'd like to deploy..."
+            Write-Host "Please select the Azure Local architecture you'd like to deploy..."
             Write-Host "1. Single Machine"
             Write-Host "2. 2-Machine Non-Converged"
             Write-Host "3. 2-Machine Fully-Converged"
@@ -114,7 +114,7 @@ try {
             Write-Host "10. 4-Machine Fully-Converged"
             Write-Host "11. 4-Machine Switchless Dual-Link"
             Write-Host "Or enter 'Q' to exit"
-            $architectureChoice = Read-Host "`nEnter the number of the Azure Local architecture you'd like to deploy"
+            $architectureChoice = Read-Host "Enter the number of the Azure Local architecture you'd like to deploy"
             switch ($architectureChoice) {
                 '1' { $azureLocalArchitecture = "Single Machine" }
                 '2' { $azureLocalArchitecture = "2-Machine Non-Converged" }
@@ -137,11 +137,11 @@ try {
                     .$askForArchitecture
                 }
             }
-            Write-Host "`nYou have chosen to deploy the $azureLocalArchitecture Azure Local architecture..." -ForegroundColor Green
+            Write-Host "You have chosen to deploy the $azureLocalArchitecture Azure Local architecture..." -ForegroundColor Green
         }
         .$askForArchitecture
         if ($azureLocalArchitecture -ne 'Q') {
-            Write-Host "`nYou have chosen to deploy the $azureLocalArchitecture Azure Local architecture..." -ForegroundColor Green
+            Write-Host "You have chosen to deploy the $azureLocalArchitecture Azure Local architecture..." -ForegroundColor Green
         }
         else {
             break
@@ -149,21 +149,21 @@ try {
     }
     elseif ($azureLocalArchitecture -notin ("Single Machine", "2-Machine Non-Converged", "2-Machine Fully-Converged", "2-Machine Switchless Dual-Link", "3-Machine Non-Converged", "3-Machine Fully-Converged",
             "3-Machine Switchless Single-Link", "3-Machine Switchless Dual-Link", "4-Machine Non-Converged", "4-Machine Fully-Converged", "4-Machine Switchless Dual-Link")) {
-        Write-Host "Incorrect Azure Local architecture specified.`nPlease re-run the script using one of the supported values" -ForegroundColor Red
+        Write-Host "Incorrect Azure Local architecture specified.Please re-run the script using one of the supported values" -ForegroundColor Red
         exit
     }
     else {
-        Write-Host "`nYou have chosen to deploy the $azureLocalArchitecture Azure Local architecture..." -ForegroundColor Green
+        Write-Host "You have chosen to deploy the $azureLocalArchitecture Azure Local architecture..." -ForegroundColor Green
     }
 
     if (!($azureLocalMachineMemory)) {
         $askForMachineMemory = {
-            $azureLocalMachineMemory = Read-Host "`nSelect the memory for each of your Azure Local machines - Enter 16, 24, 32, or 48 (or Q to exit)..."
+            $azureLocalMachineMemory = Read-Host "Select the memory for each of your Azure Local machines - Enter 16, 24, 32, or 48 (or Q to exit)..."
             switch ($azureLocalMachineMemory) {
-                '16' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Local machines..." -ForegroundColor Green }
-                '24' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Local machines..." -ForegroundColor Green }
-                '32' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Local machines..." -ForegroundColor Green }
-                '48' { Write-Host "`nYou have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Local machines..." -ForegroundColor Green }
+                '16' { Write-Host "You have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Local machines..." -ForegroundColor Green }
+                '24' { Write-Host "You have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Local machines..." -ForegroundColor Green }
+                '32' { Write-Host "You have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Local machines..." -ForegroundColor Green }
+                '48' { Write-Host "You have chosen $($azureLocalMachineMemory)GB memory for each of your Azure Local machines..." -ForegroundColor Green }
                 'Q' {
                     Write-Host 'Exiting...' -ForegroundColor Red
                     Start-Sleep -seconds 5
@@ -184,7 +184,7 @@ try {
         }
     }
     elseif ($azureLocalMachineMemory -notin ("16", "24", "32", "48")) {
-        Write-Host "Incorrect amount of memory for your Azure Local machines specified.`nPlease re-run the script using with either 16, 24, 32, or 48" -ForegroundColor Red
+        Write-Host "Incorrect amount of memory for your Azure Local machines specified.Please re-run the script using with either 16, 24, 32, or 48" -ForegroundColor Red
         break
     }
     elseif ($azureLocalMachineMemory -in ("16", "24", "32", "48")) {
@@ -193,11 +193,11 @@ try {
 
     if (!($telemetryLevel)) {
         $AskForTelemetry = {
-            $telemetryLevel = Read-Host "`nSelect the telemetry level for the deployment. This helps to improve the deployment experience.`nEnter Full, Basic or None (or Q to exit)..."
+            $telemetryLevel = Read-Host "Select the telemetry level for the deployment. This helps to improve the deployment experience.`nEnter Full, Basic or None (or Q to exit)..."
             switch ($telemetryLevel) {
-                'Full' { Write-Host "`nYou have chosen a telemetry level of $telemetryLevel for the deployment..." -ForegroundColor Green }
-                'Basic' { Write-Host "`nYou have chosen a telemetry level of $telemetryLevel for the deployment..." -ForegroundColor Green }
-                'None' { Write-Host "`nYou have chosen a telemetry level of $telemetryLevel for the deployment..." -ForegroundColor Green }
+                'Full' { Write-Host "You have chosen a telemetry level of $telemetryLevel for the deployment..." -ForegroundColor Green }
+                'Basic' { Write-Host "You have chosen a telemetry level of $telemetryLevel for the deployment..." -ForegroundColor Green }
+                'None' { Write-Host "You have chosen a telemetry level of $telemetryLevel for the deployment..." -ForegroundColor Green }
                 'Q' {
                     Write-Host 'Exiting...' -ForegroundColor Red
                     Start-Sleep -seconds 5
@@ -216,18 +216,18 @@ try {
         break
     }
     elseif ($telemetryLevel -in ("Full", "Basic", "None")) {
-        Write-Host "`nYou have chosen a telemetry level of $telemetryLevel for the deployment..." -ForegroundColor Green
+        Write-Host "You have chosen a telemetry level of $telemetryLevel for the deployment..." -ForegroundColor Green
     }
 
     if (!($updateImages)) {
         while ($updateInput -notin ("Y", "N", "Q")) {
-            $updateInput = Read-Host "`nDo you wish to update your Windows Server images automatically?`nThis will increase deployment time. Enter Y or N (or Q to exit)..."
+            $updateInput = Read-Host "Do you wish to update your Windows Server images automatically?`nThis will increase deployment time. Enter Y or N (or Q to exit)..."
             if ($updateInput -eq "Y") {
-                Write-Host "`nYou have chosen to update your Windows Server images that are created during this process.`nThis will add additional time, but your images will have the latest patches." -ForegroundColor Green
+                Write-Host "You have chosen to update your Windows Server images that are created during this process.`nThis will add additional time, but your images will have the latest patches." -ForegroundColor Green
                 $updateImages = "Yes"
             }
             elseif ($updateInput -eq "N") {
-                Write-Host "`nYou have chosen not to update your images - you can patch your Windows Server VMs once they've been deployed." -ForegroundColor Yellow
+                Write-Host "You have chosen not to update your images - you can patch your Windows Server VMs once they've been deployed." -ForegroundColor Yellow
                 $updateImages = "No"
             }
             elseif ($updateInput -eq "Q") {
@@ -241,10 +241,10 @@ try {
         }
     }
     elseif ($updateImages -eq "Yes") {
-        Write-Host "`nYou have chosen to update your Windows Server images that are created during this process.`nThis will add additional time, but your images will have the latest patches." -ForegroundColor Green
+        Write-Host "You have chosen to update your Windows Server images that are created during this process.`nThis will add additional time, but your images will have the latest patches." -ForegroundColor Green
     }
     elseif ($updateImages -eq "No") {
-        Write-Host "`nYou have chosen not to update your images - you can patch your Windows Server VMs once they've been deployed." -ForegroundColor Yellow
+        Write-Host "You have chosen not to update your images - you can patch your Windows Server VMs once they've been deployed." -ForegroundColor Yellow
     }
     elseif ($updateImages -notin ("Y", "N")) {
         Write-Host "Invalid entry for -updateImages.`nPlease re-run the script with either Yes or No." -ForegroundColor Red
@@ -252,7 +252,7 @@ try {
     }
 
     if (!($workshopPath)) {
-        Write-Host "`nPlease select folder for deployment of the Azure Local workshop infrastructure..."
+        Write-Host "Please select folder for deployment of the Azure Local workshop infrastructure..."
         Start-Sleep -Seconds 5
         Add-Type -AssemblyName System.Windows.Forms
         $FolderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog -Property @{
@@ -261,7 +261,7 @@ try {
         }
         if ($FolderBrowser.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
             $workshopPath = $FolderBrowser.SelectedPath
-            Write-Host "`nFolder selected is $workshopPath" -ForegroundColor Green
+            Write-Host "Folder selected is $workshopPath" -ForegroundColor Green
         }
         else {
             Write-Host "No valid path was selected. Exiting..." -ForegroundColor Red
@@ -272,10 +272,10 @@ try {
 
     if (!($AutoDownloadWSiso)) {
         if (!($WindowsServerIsoPath)) {
-            Write-Host "`nHave you downloaded a Windows Server 2022 ISO? If not, one will be downloaded automatically for you"
+            Write-Host "Have you downloaded a Windows Server 2022 ISO? If not, one will be downloaded automatically for you"
             $wsIsoAvailable = Read-Host "Enter Y or N"
             if ($wsIsoAvailable -eq "Y") {
-                Write-Host "`nPlease select a Windows Server 2022 ISO..."
+                Write-Host "Please select a Windows Server 2022 ISO..."
                 Start-Sleep -Seconds 3
                 Add-Type -AssemblyName System.Windows.Forms
                 #[reflection.assembly]::loadwithpartialname("System.Windows.Forms")
@@ -294,17 +294,17 @@ try {
                 }
             }
             else {
-                Write-Host "`nNo Windows Server 2022 ISO has been provided. One will be downloaded for you during deployment." -ForegroundColor Green
+                Write-Host "No Windows Server 2022 ISO has been provided. One will be downloaded for you during deployment." -ForegroundColor Green
             }
         }
     }
 
     if (!($AutoDownloadAzLiso)) {
         if (!($AzureLocalIsoPath)) {
-            Write-Host "`nHave you downloaded the latest Azure Local ISO? If not, one will be downloaded automatically for you"
+            Write-Host "Have you downloaded the latest Azure Local ISO? If not, one will be downloaded automatically for you"
             $AzLIsoAvailable = Read-Host "Enter Y or N"
             if ($AzLIsoAvailable -eq "Y") {
-                Write-Host "`nPlease select latest Azure Local ISO..."
+                Write-Host "Please select latest Azure Local ISO..."
                 Start-Sleep -Seconds 3
                 Add-Type -AssemblyName System.Windows.Forms
                 #[reflection.assembly]::loadwithpartialname("System.Windows.Forms")
@@ -317,26 +317,26 @@ try {
                     $AzureLocalIsoPath = $($openfile.FileName)
                 } 
                 if (!$openFile.FileName) {
-                    Write-Host "`nNo valid ISO file was selected... Exiting" -ForegroundColor Red
+                    Write-Host "No valid ISO file was selected... Exiting" -ForegroundColor Red
                     Start-Sleep -Seconds 5
                     break
                 }
             }
             else {
-                Write-Host "`nNo Azure Local ISO has been provided. One will be downloaded for you during deployment." -ForegroundColor Green
+                Write-Host "No Azure Local ISO has been provided. One will be downloaded for you during deployment." -ForegroundColor Green
             }
         }
     }
 
     try {
         if (!($dnsForwarders)) {
-            Write-Host "`nWould you like to use custom external DNS forwarders?`n" 
+            Write-Host "Would you like to use custom external DNS forwarders?`n" 
             Write-Host "For a single DNS forwarder, use the format like this example: 8.8.8.8"
             Write-Host "For multiple DNS forwarders (maximum 2), use the format like this example, separated by a comma (,) and with no spaces: 8.8.8.8,1.1.1.1"
             Write-Host "Alternatively, to use the default AzL DNS forwarders (8.8.8.8 and 1.1.1.1), simply press Enter to skip."
-            $askDnsQuestion = Read-Host "`nEnter your external DNS forwarder(s) IP addresses, or press enter to skip"
+            $askDnsQuestion = Read-Host "Enter your external DNS forwarder(s) IP addresses, or press enter to skip"
             if ($askDnsQuestion.Length -eq 0) {
-                Write-Host "`nYou have not entered any custom external DNS forwarders - we will use 8.8.8.8 and 1.1.1.1 as your external DNS forwarders." -ForegroundColor Green
+                Write-Host "You have not entered any custom external DNS forwarders - we will use 8.8.8.8 and 1.1.1.1 as your external DNS forwarders." -ForegroundColor Green
                 $customDNSForwarders = '8.8.8.8","1.1.1.1'
             }
             else {
@@ -349,12 +349,12 @@ try {
                     }
                 }
                 $customDNSForwarders = $dnsForwarders.Replace(',', '","')
-                Write-Host "`nYou have entered `"$customDNSForwarders`" as your custom external DNS forwarders." -ForegroundColor Green
+                Write-Host "You have entered `"$customDNSForwarders`" as your custom external DNS forwarders." -ForegroundColor Green
             }
         }
         elseif ($dnsForwarders -like "Default") {
             $customDNSForwarders = '8.8.8.8","1.1.1.1'
-            Write-Host "`nYou have selected to use the default external DNS forwarders - we will use 8.8.8.8 and 1.1.1.1 as your external DNS forwarders." -ForegroundColor Green
+            Write-Host "You have selected to use the default external DNS forwarders - we will use 8.8.8.8 and 1.1.1.1 as your external DNS forwarders." -ForegroundColor Green
         }
         else {
             $dnsForwarders = $dnsForwarders -replace '\s', ''
@@ -365,7 +365,7 @@ try {
                 }
             }
             $customDNSForwarders = $dnsForwarders.Replace(',', '","')
-            Write-Host "`nYou have entered $customDNSForwarders as your custom external DNS forwarders." -ForegroundColor Green
+            Write-Host "You have entered $customDNSForwarders as your custom external DNS forwarders." -ForegroundColor Green
         }
     }
     catch {
@@ -375,22 +375,26 @@ try {
 
     # Validate Hyper-V, starting with the management tools to allow for MOF to be successfully generated
     # Need to check for Hyper-V RSAT tools, client management and Hyper-V PowerShell
-    Write-Host "Checking if Hyper-V management tools are installed..."
-    $hypervToolsState = ((Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -eq "RSAT-Hyper-V-Tools-Feature" -or $_.FeatureName -eq "Microsoft-Hyper-V-Management-Clients" -or $_.FeatureName -eq "Microsoft-Hyper-V-Management-PowerShell" }) | Where-Object { $_.State -eq "Disabled" })
-    if ($hypervToolsState) {
-        Write-Host "`nThe following Hyper-V management features are missing and will now be installed:`n"
-        foreach ($feature in $hypervToolsState) {
+    Write-Host "Checking if Hyper-V roles/features are installed..."
+    $hypervState = (Get-WindowsOptionalFeature -Online -FeatureName "*Hyper-V*" | Where-Object { $_.State -eq "Disabled" })
+    if ($hypervState) {
+        Write-Host "The following Hyper-V roles/features are missing and will now be installed:"
+        foreach ($feature in $hypervState) {
             "$($feature.FeatureName)"
         }
-        foreach ($feature in $hypervToolsState) {
-            Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -All -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
+        $reboot = $false
+        foreach ($feature in $hypervState) {
+            $rebootCheck = Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -All -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
+            if ($($rebootCheck.RestartNeeded) -eq $true) {
+                $reboot = $true
+            }
         }
     }
 
     # Download the AzLWorkshop DSC files, and unzip them to C:\AzLWorkshopHost, then copy the PS modules to the main PS modules folder
-    Write-Host "`nStarting Azure Local workshop deployment - please do not close this PowerShell window"
+    Write-Host "Starting Azure Local workshop deployment - please do not close this PowerShell window"
     Start-Sleep -Seconds 3
-    Write-Host "`nDownloading the Azure Local workshop files to C:\AzLWorkshop.zip..."
+    Write-Host "Downloading the Azure Local workshop files to C:\AzLWorkshop.zip..."
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     Invoke-WebRequest -Uri 'https://github.com/DellGEOS/AzureLocalDeploymentWorkshop/raw/main/dsc/AzLWorkshop.zip' `
         -OutFile 'C:\AzLWorkshop.zip' -UseBasicParsing -ErrorAction Stop
@@ -418,6 +422,7 @@ try {
 $VerbosePreference = 'SilentlyContinue'
 $ProgressPreference = 'SilentlyContinue'
 try {
+    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 
     # Verify Running as Admin
     if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
@@ -432,14 +437,14 @@ try {
     ### START LOGGING ###
     $runTime = $(Get-Date).ToString("MMddyy-HHmmss")
     $fullLogPath = Join-Path -Path $PSScriptRoot -ChildPath "WorkshopLog_$runTime.txt"
-    Write-Host "`nLog folder full path is $fullLogPath"
+    Write-Host "Log folder full path is $fullLogPath"
     $startTime = Get-Date -Format g
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $mofPath = "C:\AzLWorkshopSource\AzLWorkshop\"
 
     Start-Transcript -Path "$fullLogPath" -Append
 
-    Write-Host "`nStarting Azure Local workshop deployment....a Remote Desktop icon on your desktop will indicate completion..." -ForegroundColor Green
+    Write-Host "Starting Azure Local workshop deployment....a Remote Desktop icon on your desktop will indicate completion..." -ForegroundColor Green
     Start-Sleep -Seconds 5
     Set-DscLocalConfigurationManager -Path $mofPath -Force
     try {
@@ -449,7 +454,7 @@ try {
         Write-Host "Error occurred during Start-DscConfiguration: $_" -ForegroundColor Red
         throw
     }
-    Write-Host "`nDeployment complete....use the Remote Desktop icon to connect to your Domain Controller..." -ForegroundColor Green
+    Write-Host "Deployment complete....use the Remote Desktop icon to connect to your Domain Controller..." -ForegroundColor Green
 
     $endTime = Get-Date -Format g
     $sw.Stop()
@@ -476,47 +481,21 @@ finally {
     Write-Host "Creating AzureLocalWorkshop.ps1 on your desktop..."
     $ps1Content | Out-File -FilePath $ps1Path -Force
 
-    Write-Host "Checking if required Hyper-V role and platform is installed before deployment..."
-    $hypervRoleState = ((Get-WindowsOptionalFeature -Online -FeatureName *Microsoft-Hyper-V*) | Where-Object { $_.State -eq "Disabled" })
-    if ($hypervRoleState) {
-        Write-Host "`nThe following Hyper-V roles are missing:`n"
-        foreach ($feature in $hypervRoleState) {
-            "$($feature.FeatureName)"
-        }
-        Write-Host "`nDo you wish to enable them now?" -ForegroundColor Green
-        if ((Read-Host "(Type Y or N)") -eq "Y") {
-            Write-Host "`nYou chose to install the required Hyper-V role/features.`nYou will be prompted to reboot your machine once completed.`nRun the AzureLocalWorkshop.ps1 from your desktop when back online..."
-            Start-Sleep -Seconds 10
-            $reboot = $false
-            foreach ($feature in $hypervRoleState) {
-                $rebootCheck = Enable-WindowsOptionalFeature -Online -FeatureName $($feature.FeatureName) -All -ErrorAction Stop -NoRestart -WarningAction SilentlyContinue
-                if ($($rebootCheck.RestartNeeded) -eq $true) {
-                    $reboot = $true
-                }
-            }
-            if ($reboot -eq $true) {
-                Write-Host "`nInstall completed. A reboot is required to finish installation - reboot now?`nIf not, you will need to reboot before deploying the Azure Local workshop..." -ForegroundColor Green
-                if ((Read-Host "(Type Y or N)") -eq "Y") {
-                    Write-Host "`nRebooting your host in 5 seconds...Run the AzureLocalWorkshop.ps1 from your desktop when back online..."
-                    Start-Sleep -Seconds 5
-                    Restart-Computer -Force
-                }
-                else {
-                    Write-Host 'You did not enter "Y" to confirm rebooting your host. Exiting... ' -ForegroundColor Red
-                    Break
-                }
-            }
-            else {
-                Write-Host "Install completed. No reboot is required at this time. Run the AzureLocalWorkshop.ps1 from your desktop to start the deployment..." -ForegroundColor Green
-            }
-        }
-        else {
-            Write-Host 'You did not enter "Y" to confirm installing the required Hyper-V role/features. Exiting... ' -ForegroundColor Red
-            Break
-        }
+    # Create a runonce registry key to run a script at next boot
+    # When a user logs in, the script window should be visible on the screen
+    $command = "powershell -ExecutionPolicy Bypass -File $ps1Path"
+    $run = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+    New-ItemProperty -Path $run -Name "AzlWorkshopDeployment" -Value $command -PropertyType String
+
+    Write-Host "Checking if a reboot is required before deployment..."
+    if ($reboot -eq $true) {
+        Write-Host "A reboot is required to finish installation..."
+        Write-Host "Rebooting your host in 5 seconds...Run the AzureLocalWorkshop.ps1 from your desktop when back online..."
+        Start-Sleep -Seconds 5
+        Restart-Computer -Force
     }
     else {
-        Write-Host "`nAll required Hyper-V role/features are present. Run the AzureLocalWorkshop.ps1 from your desktop to start the deployment..." -ForegroundColor Green
+        Write-Host "Install completed. No reboot is required at this time. Run the AzureLocalWorkshop.ps1 from your desktop to start the deployment..." -ForegroundColor Green
     }
 }
 catch {
