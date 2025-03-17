@@ -1145,24 +1145,23 @@ configuration AzLWorkshop
                     $result = $true
                     # Retrieve the list of VMs where the name matches the $vmPrefix-AzL* pattern
                     Get-VM -Name "$Using:vmPrefix-AzL*" | ForEach-Object {
-                        $nics = Get-VMNetworkAdapter -VMName $_.Name | Where-Object Name -like "Storage*"
+                        $nics = Get-VMNetworkAdapter -VMName $($_.Name) | Where-Object Name -like "Storage*"
                         foreach ($nic in $nics) {
-                            $vlanSettings = Get-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $_.Name
-                            if ($vlanSettings.Trunk -eq $false -or $vlanSettings.AllowedVlanIdList -ne "711-719") {
-                                $vlansCorrect = $false
+                            $vlanSettings = Get-VMNetworkAdapterVlan -VMNetworkAdapterName $($nic.Name) -VMName $($_.Name)
+                            if (($vlanSettings.AllowedVlanIdListString -ne "711-719") -or $vlanSettings.NativeVlanId -ne 0) {
+                                $result = $false
+                                Write-Host "Correct VLAN settings for $($nic.Name) on $($_.Name): $result"
                             }
-                            return $vlansCorrect
                         }
                     }
-                    $result = $vlanCorrect
                     return @{ 'Result' = $result }
                 }
                 SetScript  = {
                     Get-VM -Name "$Using:vmPrefix-AzL*" | ForEach-Object {
-                        $nics = Get-VMNetworkAdapter -VMName $_.Name | Where-Object Name -like "Storage*"
+                        $nics = Get-VMNetworkAdapter -VMName $($_.Name) | Where-Object Name -like "Storage*"
                         foreach ($nic in $nics) {
-                            Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $_.Name -Access -VlanId 0
-                            Set-VMNetworkAdapterVlan -VMNetworkAdapterName $nic.Name -VMName $_.Name -Trunk -AllowedVlanIdList 711-719
+                            Write-Host "Setting VLAN 711-719 on $($nic.Name) on $($_.Name)"
+                            Set-VMNetworkAdapterVlan -VMNetworkAdapterName $($nic.Name) -VMName $($_.Name) -Trunk -AllowedVlanIdList "711-719" -NativeVlanId 0
                         }
                     }
                 }
