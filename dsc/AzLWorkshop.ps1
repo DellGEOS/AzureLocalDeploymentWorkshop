@@ -343,6 +343,7 @@ configuration AzLWorkshop
             }
     
             SetScript  = {
+                $ProgressPreference = 'SilentlyContinue'
                 Start-BitsTransfer -Source $Using:wsIsoUri -Destination $Using:wsISOLocalPath   
             }
             TestScript = {
@@ -360,6 +361,7 @@ configuration AzLWorkshop
             }
 
             SetScript  = {
+                $ProgressPreference = 'SilentlyContinue'
                 Start-BitsTransfer -Source $Using:azureLocalIsoUri -Destination $Using:azLocalISOLocalPath            
             }
 
@@ -384,6 +386,7 @@ configuration AzLWorkshop
 
             SetScript  = {
                 if ($Using:updateImages -eq "Yes") {
+                    $ProgressPreference = 'SilentlyContinue'
                     $cuSearchString = "Cumulative Update for Microsoft server operating system*version 23H2 for x64-based Systems"
                     $cuID = "Microsoft Server operating system-23H2"
                     Write-Host "Looking for updates that match: $cuSearchString and $cuID"
@@ -426,6 +429,7 @@ configuration AzLWorkshop
             }
 
             SetScript  = {
+                $ProgressPreference = 'SilentlyContinue'
                 if ($Using:updateImages -eq "Yes") {
                     $ssuSearchString = "Servicing Stack Update for Microsoft server operating system*version 23H2 for x64-based Systems"
                     $ssuID = "Microsoft Server operating system-23H2"
@@ -713,7 +717,7 @@ configuration AzLWorkshop
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 Start-Sleep -Seconds 10
                 $result = Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
-                    [bool] (Get-WmiObject -class win32_product  | Where-Object { $_.Name -eq "Windows Admin Center" })
+                    [bool] (Get-Service -Name "WindowsAdminCenter" | Where-Object { $_.Status -eq "Running" })
                 }
                 return @{ 'Result' = $result }
             }
@@ -721,35 +725,56 @@ configuration AzLWorkshop
             SetScript  = {
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
-                    if (-not (Test-Path -Path "C:\WindowsAdminCenter.exe")) {
-                        $ProgressPreference = 'SilentlyContinue'
-                        Invoke-WebRequest -Uri 'https://aka.ms/WACDownload' -OutFile "C:\WindowsAdminCenter.exe" -UseBasicParsing
-                    }
-                    # Download PSexec
-                    if (-not (Test-Path -Path "C:\PStools.zip")) {
-                        $ProgressPreference = 'SilentlyContinue'
-                        Invoke-WebRequest -Uri 'https://download.sysinternals.com/files/PSTools.zip' -OutFile "C:\PStools.zip" -UseBasicParsing
-                        Expand-Archive -Path "C:\PStools.zip" -DestinationPath "C:\PStools" -Force
-                    }
+                    $retryCount = 0
+                    $maxRetries = 3
+                    while ($retryCount -lt $maxRetries) {
+                        try {
+                            if (-not (Test-Path -Path "C:\WindowsAdminCenter.exe")) {
+                                $ProgressPreference = 'SilentlyContinue'
+                                Invoke-WebRequest -Uri 'https://aka.ms/WACDownload' -OutFile "C:\WindowsAdminCenter.exe" -UseBasicParsing
+                            }
 
-                    # Install WAC using PSexec
-                    if (-not (Get-WmiObject -class win32_product  | Where-Object { $_.Name -eq "Windows Admin Center" })) {
-                        Start-Process "C:\PStools\PsExec.exe" -ArgumentList "-accepteula -s -i -d C:\WindowsAdminCenter.exe /log=C:\WindowsAdminCenter.log /verysilent" -Wait
-                    }
+                            if (-not (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue)) {
+                                Start-Process -FilePath 'C:\WindowsAdminCenter.exe' -ArgumentList '/VERYSILENT /log=C:\WindowsAdminCenter.log' -Wait
+                            }
 
-                    do {
-                        # Check if WindowsAdminCenter service is present and if not, wait for 10 seconds and check again
-                        while (-not (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue)) {
-                            Write-Output "Windows Admin Center not yet installed. Checking again in 10 seconds."
-                            Start-Sleep -Seconds 10
+                            $timeout = [DateTime]::Now.AddMinutes(2)
+                            if ([DateTime]::Now -ge $timeout) {
+                                do {
+                                    # Check if WindowsAdminCenter service is present and if not, wait for 10 seconds and check again
+                                    while (-not (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue)) {
+                                        Write-Host "Windows Admin Center not yet installed. Checking again in 10 seconds."
+                                        Start-Sleep -Seconds 10
+                                    }
+                                    
+                                    if ((Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue).status -ne "Running") {
+                                        Write-Host "Attempting to start Windows Admin Center Service - this may take a few minutes if the service has just been installed."
+                                        Start-Service WindowsAdminCenter -ErrorAction SilentlyContinue
+                                    }
+                                    Start-Sleep -Seconds 5
+                                } until ((Test-NetConnection -ErrorAction SilentlyContinue -ComputerName "localhost" -port 443).TcpTestSucceeded)
+                                break
+                            }
+                            else {
+                                throw "Windows Admin Center installation took too long. Uninstalling and trying again..."
+                            }
                         }
-                        
-                        if ((Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue).status -ne "Running") {
-                            Write-Output "Attempting to start Windows Admin Center (WindowsAdminCenter) Service - this may take a few minutes if the service has just been installed."
-                            Start-Service WindowsAdminCenter -ErrorAction SilentlyContinue
+                        catch {
+                            Write-Host "Installation failed. Attempting to uninstall and retry. Retry count: $($retryCount + 1)"
+                            # Search for Uninstall exe in C:\Program Files\WindowsAdminCenter\
+                            $uninstallPath = Get-ChildItem -Path "C:\Program Files\WindowsAdminCenter\" -Filter "unins*.exe" -Recurse -ErrorAction SilentlyContinue
+                            if ($uninstallPath) {
+                                Start-Process -FilePath $uninstallPath.FullName -ArgumentList '/VERYSILENT /log=C:\WACUninstall.log' -Wait
+                            }
+                            else {
+                                throw "Failed to find uninstaller for Windows Admin Center. Attempting to install again."
+                            }
+                            $retryCount++
                         }
-                        Start-sleep -Seconds 5
-                    } until ((Test-NetConnection -ErrorAction SilentlyContinue -ComputerName "localhost" -port 443).TcpTestSucceeded)
+                    }
+                    if ($retryCount -eq $maxRetries) {
+                        throw "Failed to install Windows Admin Center after $maxRetries attempts."
+                    }
                 }
             }
 
@@ -781,6 +806,7 @@ configuration AzLWorkshop
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
                     # Update wallpaper
+                    $ProgressPreference = 'SilentlyContinue'
                     Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/media/azlwallpaper.png' -OutFile "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -UseBasicParsing
                     Set-GPPrefRegistryValue -Name "Default Domain Policy" -Context User -Action Replace -Key "HKCU\Control Panel\Desktop" -ValueName Wallpaper -Value "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -Type String
                     # Update WAC certificate
