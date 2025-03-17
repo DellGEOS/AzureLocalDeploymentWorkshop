@@ -484,8 +484,8 @@ finally {
     # Create a runonce registry key to run a script at next boot
     # When a user logs in, the script window should be visible on the screen
     $command = "powershell -ExecutionPolicy Bypass -File $ps1Path"
-    $run = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-    New-ItemProperty -Path $run -Name "AzlWorkshopDeployment" -Value $command -PropertyType String -Force
+    $run = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
+    New-ItemProperty -Path $run -Name "!AzlWorkshopDeployment" -Value $command -PropertyType String -Force
 
     Write-Host "Checking if a reboot is required before deployment..."
     if ($reboot -eq $true) {
