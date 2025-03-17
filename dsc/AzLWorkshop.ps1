@@ -731,12 +731,12 @@ configuration AzLWorkshop
                         try {
                             # Clean previous log file entries - need a while loop to see if it exists and if so, remove it
                             # If removal fails, it may be because an install is in progress, so we need to wait and try again
+                            Write-Host "Checking to see if WindowsAdminCenter.log exists before cleaning up - may be locked due to ongoing installation. Waiting 20 seconds and trying again..."
                             do {
                                 if (Test-Path -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue) {
                                     Remove-Item -Path "C:\WindowsAdminCenter.log" -Force -ErrorAction SilentlyContinue
-                                    Write-Host "Cannot cleanup Windows Admin Center log file - may be locked due to ongoing installation. Waiting 20 seconds and trying again..."
                                     Start-Sleep -Seconds 20
-                                } 
+                                }
                             } while (Test-Path -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue)
         
                             # Repeat for Uninstall log file
@@ -764,7 +764,7 @@ configuration AzLWorkshop
                             # Need to check the file contents every 30 seconds for the term 'Log closed.'
                             Start-Sleep -seconds 30
                             $timeout = [DateTime]::Now.AddMinutes(7)
-                            if ([DateTime]::Now -ge $timeout) {
+                            if ([DateTime]::Now -lt $timeout) {
                                 do {
                                     Write-Host "Checking to see if Windows Admin Center installation is complete..."
                                     $processComplete = Get-ChildItem -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue | Get-Content | Select-String "Log closed."
@@ -801,7 +801,7 @@ configuration AzLWorkshop
                                 Start-Process -FilePath $uninstallPath.FullName -ArgumentList '/VERYSILENT /log=C:\WACUninstall.log'
                                 Start-Sleep -seconds 30
                                 $timeout = [DateTime]::Now.AddMinutes(7)
-                                if ([DateTime]::Now -ge $timeout) {
+                                if ([DateTime]::Now -lt $timeout) {
                                     do {
                                         Write-Host "Checking to see if Windows Admin Center uninstallation is complete..."
                                         $uninstallComplete = Get-ChildItem -Path "C:\WACUninstall.log" -ErrorAction SilentlyContinue | Get-Content | Select-String "Log closed."
