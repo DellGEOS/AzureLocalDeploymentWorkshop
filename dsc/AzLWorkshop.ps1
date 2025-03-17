@@ -717,7 +717,8 @@ configuration AzLWorkshop
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 Start-Sleep -Seconds 10
                 $result = Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
-                    [bool] (Get-Service -Name "WindowsAdminCenter" | Where-Object { $_.Status -eq "Running" })
+                    Write-Host "Checking if Windows Admin Center is installed and running..."
+                    [bool] (Get-Service -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" })
                 }
                 return @{ 'Result' = $result }
             }
@@ -729,17 +730,36 @@ configuration AzLWorkshop
                     $maxRetries = 3
                     while ($retryCount -lt $maxRetries) {
                         try {
+                            # Clean previous log file entries
+                            Get-ChildItem -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue | Remove-Item -Force
+                            Get-ChildItem -Path "C:\WACUninstall.log" -ErrorAction SilentlyContinue | Remove-Item -Force
+
                             if (-not (Test-Path -Path "C:\WindowsAdminCenter.exe")) {
                                 $ProgressPreference = 'SilentlyContinue'
+                                Write-Host "Downloading Windows Admin Center..."
                                 Invoke-WebRequest -Uri 'https://aka.ms/WACDownload' -OutFile "C:\WindowsAdminCenter.exe" -UseBasicParsing
                             }
 
                             if (-not (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue)) {
-                                Start-Process -FilePath 'C:\WindowsAdminCenter.exe' -ArgumentList '/VERYSILENT /log=C:\WindowsAdminCenter.log' -Wait
+                                Write-Host "Installing Windows Admin Center..."
+                                Start-Process -FilePath 'C:\WindowsAdminCenter.exe' -ArgumentList '/VERYSILENT /log=C:\WindowsAdminCenter.log'
                             }
 
-                            $timeout = [DateTime]::Now.AddMinutes(2)
+                            # Need to monitor the log file for the installation to complete - term for checking is 'Installation process succeeded.'
+                            # Log file is located at C:\WindowsAdminCenter.log
+                            # Need to check the file contents every 30 seconds for the term 'Log closed.'
+
+                            $timeout = [DateTime]::Now.AddMinutes(7)
                             if ([DateTime]::Now -ge $timeout) {
+                                do {
+                                    $processComplete = Get-ChildItem -Path "C:\WindowsAdminCenter.log" | Get-Content | Select-String "Log closed."
+                                    if ($processComplete) {
+                                        break
+                                    }
+                                    Write-Host "Windows Admin Center installation in progress. Checking again in 20 seconds."
+                                    Start-Sleep -Seconds 20
+                                } while (-not $processComplete)
+
                                 do {
                                     # Check if WindowsAdminCenter service is present and if not, wait for 10 seconds and check again
                                     while (-not (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue)) {
