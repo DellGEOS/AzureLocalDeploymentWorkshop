@@ -748,11 +748,12 @@ configuration AzLWorkshop
                             # Need to monitor the log file for the installation to complete - term for checking is 'Installation process succeeded.'
                             # Log file is located at C:\WindowsAdminCenter.log
                             # Need to check the file contents every 30 seconds for the term 'Log closed.'
-
+                            Start-Sleep -seconds 30
                             $timeout = [DateTime]::Now.AddMinutes(7)
                             if ([DateTime]::Now -ge $timeout) {
                                 do {
-                                    $processComplete = Get-ChildItem -Path "C:\WindowsAdminCenter.log" | Get-Content | Select-String "Log closed."
+                                    Write-Host "Checking to see if Windows Admin Center installation is complete..."
+                                    $processComplete = Get-ChildItem -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue | Get-Content | Select-String "Log closed."
                                     if ($processComplete) {
                                         break
                                     }
@@ -782,12 +783,12 @@ configuration AzLWorkshop
                         catch {
                             Write-Host "Installation failed. Attempting to uninstall and retry. Retry count: $($retryCount + 1)"
                             # Search for Uninstall exe in C:\Program Files\WindowsAdminCenter\
-                            $uninstallPath = Get-ChildItem -Path "C:\Program Files\WindowsAdminCenter\" -Filter "unins*.exe" -Recurse -ErrorAction SilentlyContinue
+                            $uninstallPath = Get-ChildItem -Path "C:\Program Files\WindowsAdminCenter\" -Filter "unins*.exe" -ErrorAction SilentlyContinue
                             if ($uninstallPath) {
                                 Start-Process -FilePath $uninstallPath.FullName -ArgumentList '/VERYSILENT /log=C:\WACUninstall.log' -Wait
                             }
                             else {
-                                throw "Failed to find uninstaller for Windows Admin Center. Attempting to install again."
+                                Write-Host "Failed to find uninstaller for Windows Admin Center. Attempting to install again."
                             }
                             $retryCount++
                         }
