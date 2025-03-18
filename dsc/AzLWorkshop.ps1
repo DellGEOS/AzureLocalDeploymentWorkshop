@@ -721,6 +721,10 @@ configuration AzLWorkshop
                     [bool] ((Get-Service -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }) -and 
                             (Get-Service -Name "WindowsAdminCenterAccountManagement" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }))
                 }
+                # Write a message if the result is true, that installation must already be complete
+                if ($result) {
+                    Write-Host "Windows Admin Center is already installed and running."
+                }
                 return @{ 'Result' = $result }
             }
             SetScript  = {
@@ -745,16 +749,20 @@ configuration AzLWorkshop
                                     return
                                 }
                                 # Then check if the service is installed but not running
-                                if ((Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue) -and (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue).Status -ne "Running") {
-                                    Write-Host "Windows Admin Center service is installed but not running. Attempting to start the service every 10 seconds."
+                                if (((Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue) -and (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue).Status -ne "Running") -and `
+                                ((Get-Service WindowsAdminCenterAccountManagement -ErrorAction SilentlyContinue) -and (Get-Service WindowsAdminCenterAccountManagement -ErrorAction SilentlyContinue).Status -ne "Running")) {
+                                    Write-Host "WindowsAdminCenter and WindowsAdminCenterAccountManagement service appear to be installed but not running. Attempting to start the service every 10 seconds."
                                     Start-Service WindowsAdminCenter -ErrorAction SilentlyContinue
+                                    Start-Service WindowsAdminCenterAccountManagement -ErrorAction SilentlyContinue
                                     Start-Sleep -Seconds 10
                                     CheckTimeout -timeout $timeout
                                     continue
                                 }
                                 # If the service is not installed, check if the installation is in progress - this can be done by checking Get-Process returns WindowsAdminCenter and WindowsAdminCenter.tmp
-                                if ((Get-Process -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue) -or (Get-Process -Name "WindowsAdminCenter.tmp" -ErrorAction SilentlyContinue) -or (Get-Process -Name "TrustedInstaller" -ErrorAction SilentlyContinue)) {
-                                    Write-Host "Windows Admin Center installation in progress. Checking again in 20 seconds."
+                                if ((Get-Process -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue) -and `
+                                    (Get-Process -Name "WindowsAdminCenter.tmp" -ErrorAction SilentlyContinue) -and `
+                                    (Get-Process -Name "TrustedInstaller" -ErrorAction SilentlyContinue)) {
+                                    Write-Host "This should not show on first run - Windows Admin Center installation in progress. Checking again in 20 seconds."
                                     Start-Sleep -Seconds 20
                                     CheckTimeout -timeout $timeout
                                     continue
@@ -769,7 +777,7 @@ configuration AzLWorkshop
                                     Remove-Item -Path "C:\WACUninstall.log" -Force
                                 }
                                 # Then, download the Windows Admin Center installer if it is not already present
-                                Write-Host "Windows Admin Center not installed, or currently being installed. Downloading the installer..."
+                                Write-Host "Windows Admin Center not installed. Downloading the installer..."
                                 if (-not (Test-Path -Path "C:\WindowsAdminCenter.exe")) {
                                     $ProgressPreference = 'SilentlyContinue'
                                     Write-Host "Downloading Windows Admin Center..."
@@ -783,12 +791,13 @@ configuration AzLWorkshop
                                 }
                                 # Wait for the installation to complete
                                 # Check the Get-Process to see if WindowsAdminCenter and WindowsAdminCenter.tmp installation services are present as this indicates that the install is happening
-                                while ((Get-Process -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue) -or (Get-Process -Name "WindowsAdminCenter.tmp" -ErrorAction SilentlyContinue)) {
+                                while ((Get-Process -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue) -or (Get-Process -Name "WindowsAdminCenter.tmp" -ErrorAction SilentlyContinue) -or (Get-Process -Name "TrustedInstaller" -ErrorAction SilentlyContinue)) {
                                     Write-Host "Windows Admin Center installation in progress. Checking again in 20 seconds."
                                     Start-Sleep -Seconds 20
                                     # Check log file for "Log closed." to indicate installation is complete
                                     $processComplete = Get-ChildItem -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue | Get-Content | Select-String "Log closed."
                                     if ($processComplete) {
+                                        Write-Host "Windows Admin Center installation complete."
                                         break
                                     }
                                     CheckTimeout -timeout $timeout
