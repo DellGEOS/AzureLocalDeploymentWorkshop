@@ -2,7 +2,7 @@
 $LabConfig = @{ DomainAdminName = '<<DomainAdminName>>'; AdminPassword = '<<AdminPassword>>'; DCEdition = '4'; ServerISOFolder = '<<WSServerIsoPath>>'; `
                 ServerMSUsFolder = '<<MsuFolder>>'; DomainNetbiosName = '<<DomainNetBios>>'; DefaultOUName = "AzLWorkshop"; DomainName = '<<DomainName>>'; `
                 Internet = $true ; TelemetryLevel = '<<TelemetryLevel>>'; AutoStartAfterDeploy = $true; VMs = @(); AutoClosePSWindows = $true; `
-                AutoCleanUp = $true; SwitchName = "<<vSwitchName>>"; Prefix = "<<VmPrefix>>-"; AllowedVLANs="<<allowedVlans>>"; `
+                DHCPscope="192.168.0.0"; AutoCleanUp = $true; SwitchName = "<<vSwitchName>>"; Prefix = "<<VmPrefix>>-"; AllowedVLANs="<<allowedVlans>>"; `
                 CustomDnsForwarders=@("<<customDNSForwarders>>"); AdditionalNetworksConfig=@()
 }
 
