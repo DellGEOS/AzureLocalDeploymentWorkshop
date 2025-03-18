@@ -15,7 +15,7 @@ $LabConfig = @{ DomainAdminName = '<<DomainAdminName>>'; AdminPassword = '<<Admi
 }
 
 # Deploy Windows Admin Center Management Server
-$LabConfig.VMs += @{ VMName = 'WAC' ; ParentVHD = 'Win2022Core_G2.vhdx' ; MGMTNICs = 1 }
+<<installWAC>>
 
 #Management machine
 #$LabConfig.VMs += @{ VMName = 'MGMT' ; ParentVHD = 'Win2022_G2.vhdx'; MGMTNICs=1 ; AddToolsVHD=$True }

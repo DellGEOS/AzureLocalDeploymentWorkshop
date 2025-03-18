@@ -10,6 +10,8 @@ param
     [String]$telemetryLevel,
     [ValidateSet("No", "Yes")]
     [String]$updateImages,
+    [ValidateSet("No", "Yes")]
+    [String]$installWAC,
     [String]$workshopPath,
     [String]$domainName,
     [String]$WindowsServerIsoPath,
@@ -251,6 +253,36 @@ try {
         break
     }
 
+    if (!($installWAC)) {
+        while ($installWAC -notin ("Yes", "No", "Q")) {
+            $updateInput = Read-Host "Would you like to install Windows Admin Center in the Azure Local workshop environment?`nEnter Yes or No (or Q to exit)..."
+            if ($installWAC -eq "Yes") {
+                Write-Host "You have chosen to install Windows Admin Center in the Azure Local workshop environment." -ForegroundColor Green
+            }
+            elseif ($installWAC -eq "No") {
+                Write-Host "You have chosen not to install Windows Admin Center in the Azure Local workshop environment." -ForegroundColor Yellow
+            }
+            elseif ($installWAC -eq "Q") {
+                Write-Host 'Exiting...' -ForegroundColor Red
+                Start-Sleep -Seconds 5
+                break 
+            }
+            else {
+                Write-Host "Invalid entry. Try again." -ForegroundColor Yellow
+            } 
+        }
+    }
+    elseif ($installWAC -eq "Yes") {
+        Write-Host "You have chosen to install Windows Admin Center in the Azure Local workshop environment." -ForegroundColor Green
+    }
+    elseif ($installWAC -eq "No") {
+        Write-Host "You have chosen not to install Windows Admin Center in the Azure Local workshop environment." -ForegroundColor Yellow
+    }
+    elseif ($installWAC -notin ("Yes", "No")) {
+        Write-Host "Invalid entry for -installWAC.`nPlease re-run the script with either Yes or No." -ForegroundColor Red
+        break
+    }
+
     if (!($workshopPath)) {
         Write-Host "Please select folder for deployment of the Azure Local workshop infrastructure..."
         Start-Sleep -Seconds 5
@@ -414,7 +446,7 @@ try {
 
     AzLWorkshop -workshopPath $workshopPath -azureLocalArchitecture $azureLocalArchitecture -adminCreds $adminCreds -domainName $domainName `
         -azureLocalMachineMemory $azureLocalMachineMemory -telemetryLevel $telemetryLevel -updateImages $updateImages `
-        -WindowsServerIsoPath $WindowsServerIsoPath -AzureLocalIsoPath $AzureLocalIsoPath -customDNSForwarders $customDNSForwarders
+        -WindowsServerIsoPath $WindowsServerIsoPath -AzureLocalIsoPath $AzureLocalIsoPath -customDNSForwarders $customDNSForwarders -installWAC $installWAC
 
     # Create a PS1 file that will be placed on the current user's desktop
     $ps1Path = "$env:USERPROFILE\Desktop\AzureLocalWorkshop.ps1"
