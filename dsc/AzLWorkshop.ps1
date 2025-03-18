@@ -759,10 +759,22 @@ configuration AzLWorkshop
                                     continue
                                 }
                                 # If the service is not installed, check if the installation is in progress - this can be done by checking Get-Process returns WindowsAdminCenter and WindowsAdminCenter.tmp
-                                if ((Get-Process -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue) -and `
-                                    (Get-Process -Name "WindowsAdminCenter.tmp" -ErrorAction SilentlyContinue) -and `
+                                if ((Get-Process -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue) -or `
+                                    (Get-Process -Name "WindowsAdminCenter.tmp" -ErrorAction SilentlyContinue) -or `
                                     (Get-Process -Name "TrustedInstaller" -ErrorAction SilentlyContinue)) {
-                                    Write-Host "This should not show on first run - Windows Admin Center installation in progress. Checking again in 20 seconds."
+                                    # Display which processes have been detected
+                                    $detectedProcesses = @()
+                                    if (Get-Process -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue) {
+                                        $detectedProcesses += "WindowsAdminCenter"
+                                    }
+                                    if (Get-Process -Name "WindowsAdminCenter.tmp" -ErrorAction SilentlyContinue) {
+                                        $detectedProcesses += "WindowsAdminCenter.tmp"
+                                    }
+                                    if (Get-Process -Name "TrustedInstaller" -ErrorAction SilentlyContinue) {
+                                        $detectedProcesses += "TrustedInstaller"
+                                    }
+                                    Write-Host "Detected running processes: $($detectedProcesses -join ', ')"
+                                    Write-Host "Windows Admin Center installation detected. Retrying in 20 seconds."
                                     Start-Sleep -Seconds 20
                                     CheckTimeout -timeout $timeout
                                     continue
