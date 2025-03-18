@@ -740,7 +740,7 @@ configuration AzLWorkshop
                             } while (Test-Path -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue)
         
                             # Repeat for Uninstall log file
-                            Write-Host "Checking to see if WindowsAdminCenter.log exists before cleaning up - may be locked due to ongoing installation. Waiting 20 seconds and trying again..."
+                            Write-Host "Checking to see if WACUninstall.log exists before cleaning up - may be locked due to ongoing installation. Waiting 20 seconds and trying again..."
                             do {
                                 if (Test-Path -Path "C:\WACUninstall.log" -ErrorAction SilentlyContinue) {
                                     Remove-Item -Path "C:\WACUninstall.log" -Force -ErrorAction SilentlyContinue
@@ -755,7 +755,7 @@ configuration AzLWorkshop
                             }
         
                             if (-not (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue)) {
-                                Write-Host "Installing Windows Admin Center..."
+                                Write-Host "Installing Windows Admin Center - this can take up to 10 minutes..."
                                 Start-Process -FilePath 'C:\WindowsAdminCenter.exe' -ArgumentList '/VERYSILENT /log=C:\WindowsAdminCenter.log'
                             }
         
@@ -763,8 +763,13 @@ configuration AzLWorkshop
                             # Log file is located at C:\WindowsAdminCenter.log
                             # Need to check the file contents every 30 seconds for the term 'Log closed.'
                             Start-Sleep -seconds 30
-                            $timeout = [DateTime]::Now.AddMinutes(7)
-                            if ([DateTime]::Now -lt $timeout) {
+                            function CheckTimeout {
+                                param ([datetime]$timeout)
+                                if ([DateTime]::Now -gt $timeout) {
+                                    throw "Windows Admin Center installation took too long. Uninstalling and trying again..."
+                                }
+                            }
+                            while ([DateTime]::Now -lt $timeout) {
                                 do {
                                     Write-Host "Checking to see if Windows Admin Center installation is complete..."
                                     $processComplete = Get-ChildItem -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue | Get-Content | Select-String "Log closed."
@@ -773,24 +778,24 @@ configuration AzLWorkshop
                                     }
                                     Write-Host "Windows Admin Center installation in progress. Checking again in 20 seconds."
                                     Start-Sleep -Seconds 20
+                                    CheckTimeout -timeout $timeout
                                 } while (-not $processComplete)
-        
+                            
                                 do {
-                                    # Check if WindowsAdminCenter service is present and if not, wait for 10 seconds and check again
                                     if (-not (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue)) {
                                         Write-Host "Windows Admin Center not yet installed. Checking again in 10 seconds."
                                         Start-Sleep -Seconds 10
+                                        CheckTimeout -timeout $timeout
+                                        continue
                                     }
-                                    if ((Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue).status -ne "Running") {
+
+                                    if ((Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue).Status -ne "Running") {
                                         Write-Host "Attempting to start Windows Admin Center Service - this may take a few minutes if the service has just been installed."
                                         Start-Service WindowsAdminCenter -ErrorAction SilentlyContinue
+                                        CheckTimeout -timeout $timeout
                                     }
-                                    Start-Sleep -Seconds 5
                                 } until ((Test-NetConnection -ErrorAction SilentlyContinue -ComputerName "localhost" -port 443).TcpTestSucceeded)
                                 break
-                            }
-                            else {
-                                throw "Windows Admin Center installation took too long. Uninstalling and trying again..."
                             }
                         }
                         catch {
