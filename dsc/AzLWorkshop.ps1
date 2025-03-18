@@ -718,7 +718,8 @@ configuration AzLWorkshop
                 Start-Sleep -Seconds 10
                 $result = Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
                     Write-Host "Checking if Windows Admin Center is installed and running..."
-                    [bool] (Get-Service -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" })
+                    [bool] ((Get-Service -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }) -and 
+                            (Get-Service -Name "WindowsAdminCenterAccountManagement" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }))
                 }
                 return @{ 'Result' = $result }
             }
@@ -741,7 +742,7 @@ configuration AzLWorkshop
                                 # This is done by checking if the WindowsAdminCenter service is present and running, and also if Test-NetConnection to localhost on port 443 is successful
                                 if ((Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue) -and (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue).Status -eq "Running" -and (Test-NetConnection -ErrorAction SilentlyContinue -ComputerName "localhost" -port 443).TcpTestSucceeded) {
                                     Write-Host "Windows Admin Center is already installed and running."
-                                    break
+                                    return
                                 }
                                 # Then check if the service is installed but not running
                                 if ((Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue) -and (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue).Status -ne "Running") {
