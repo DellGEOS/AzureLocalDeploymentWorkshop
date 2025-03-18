@@ -769,6 +769,7 @@ configuration AzLWorkshop
                                     throw "Windows Admin Center installation took too long. Uninstalling and trying again..."
                                 }
                             }
+                            $timeout = [DateTime]::Now.AddMinutes(12)
                             while ([DateTime]::Now -lt $timeout) {
                                 do {
                                     Write-Host "Checking to see if Windows Admin Center installation is complete..."
