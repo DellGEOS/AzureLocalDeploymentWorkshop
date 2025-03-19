@@ -183,6 +183,28 @@
                 "description": "Select the memory per Azure Local machine. If you choose more memory than will fit on your host system, the per-machine memory will be reduced automatically."
             }
         },
+        "installWindowsAdminCenter": {
+            "type": "string",
+            "defaultValue": "Yes",
+            "allowedValues": [
+                "No",
+                "Yes"
+            ],
+            "metadata": {
+                "description": "Select Yes if you wish to install Windows Admin Center inside the Azure Local environment. This can be used to perform additional management tasks against your Azure Local machines and instance."
+            }
+        },
+        "updateImages": {
+            "type": "string",
+            "defaultValue": "No",
+            "allowedValues": [
+                "No",
+                "Yes"
+            ],
+            "metadata": {
+                "description": "Select Yes if you wish to update the images of the nested Windows Server machines, including your DC and WAC server. This will take longer to deploy."
+            }
+        },
         "telemetryLevel": {
             "type": "string",
             "defaultValue": "Full",
@@ -418,7 +440,6 @@
     },
     "variables": {
         "dataDisksCount": 8,
-        "updateImages": "No",
         "dscUri": "https://github.com/DellGEOS/AzureLocalDeploymentWorkshop/raw/main/dsc/AzureLocalWorkshop.zip",
         "artifactsLocation": "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/",
         "randomGUID": "[substring(uniqueString(subscription().subscriptionId, resourceGroup().id, parameters('virtualMachineName')),0,6)]",
@@ -626,7 +647,8 @@
                                 "azureLocalMachineMemory": "[parameters('azureLocalMachineMemory')]",
                                 "domainName": "[parameters('domainName')]",
                                 "telemetryLevel": "[parameters('telemetryLevel')]",
-                                "updateImages": "[variables('updateImages')]"
+                                "updateImages": "[parameters('updateImages')]",
+                                "installWindowsAdminCenter": "[parameters('installWindowsAdminCenter')]"
                             }
                         },
                         "protectedSettings": {
