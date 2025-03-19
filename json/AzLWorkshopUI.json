@@ -80,7 +80,8 @@
                             ],
                             "constraints": {
                                 "required": true,
-                                "allowedSizes": ["Standard_D8s_v4",
+                                "allowedSizes": [
+                                    "Standard_D8s_v4",
                                     "Standard_D16s_v4",
                                     "Standard_D32s_v4",
                                     "Standard_D48s_v4",
@@ -172,7 +173,8 @@
                                     "Standard_E20ds_v6",
                                     "Standard_E32ds_v6",
                                     "Standard_E48ds_v6",
-                                    "Standard_E64ds_v6"]
+                                    "Standard_E64ds_v6"
+                                ]
                             },
                             "options": {
                                 "hideDiskTypeFilter": false
@@ -469,11 +471,11 @@
                             "visible": true
                         },
                         {
-                            "name": "azureLocalInfo3",
+                            "name": "azureLocalInfoWAC",
                             "type": "Microsoft.Common.TextBlock",
                             "visible": true,
                             "options": {
-                                "text": "Finally, provide a valid domain name for your Azure Local environment, and select your preferred telemetry level. Choose to opt-in to telemetry collection to better understand impact of the AzLWorkshop/MSLab scripts i.e. number of VMs deployed, where MSLab is being used etc.",
+                                "text": "Choose whether you wish to install Windows Admin Center in your Azure Local environment. This can be used to perform additional management tasks against your Azure Local machines and instance.",
                                 "link": {
                                     "label": "",
                                     "uri": ""
@@ -481,11 +483,107 @@
                             }
                         },
                         {
+                            "name": "installWAC",
+                            "type": "Microsoft.Common.DropDown",
+                            "label": "Install Windows Admin Center",
+                            "subLabel": "",
+                            "defaultValue": "Yes",
+                            "toolTip": "Select Yes to install Windows Admin Center in your Azure Local environment.",
+                            "constraints": {
+                                "required": true,
+                                "allowedValues": [
+                                    {
+                                        "label": "Yes",
+                                        "value": "Yes"
+                                    },
+                                    {
+                                        "label": "No",
+                                        "value": "No"
+                                    }
+                                ],
+                                "validations": []
+                            },
+                            "infoMessages": [],
+                            "visible": true
+                        },
+                        {
+                            "name": "azureLocalInfoUpdateImages",
+                            "type": "Microsoft.Common.TextBlock",
+                            "visible": true,
+                            "options": {
+                                "text": "Choose whether you would like to update the images of the nested Windows Server machines, including your DC and WAC server. This will take longer to deploy.",
+                                "link": {
+                                    "label": "",
+                                    "uri": ""
+                                }
+                            }
+                        },
+                        {
+                            "name": "updateImages",
+                            "type": "Microsoft.Common.DropDown",
+                            "label": "Update Windows Server Images",
+                            "subLabel": "",
+                            "defaultValue": "No",
+                            "toolTip": "Select Yes to update the images of the nested Windows Server machines, including your DC and WAC server.",
+                            "constraints": {
+                                "required": true,
+                                "allowedValues": [
+                                    {
+                                        "label": "Yes",
+                                        "value": "Yes"
+                                    },
+                                    {
+                                        "label": "No",
+                                        "value": "No"
+                                    }
+                                ],
+                                "validations": []
+                            },
+                            "infoMessages": [],
+                            "visible": true
+                        },
+                        {
+                            "name": "azureLocalInfo3",
+                            "type": "Microsoft.Common.TextBlock",
+                            "visible": true,
+                            "options": {
+                                "text": "Choose whether you would like to enable Azure Local telemetry. This will help us improve the service by collecting data on how you use Azure Local.",
+                                "link": {
+                                    "label": "",
+                                    "uri": ""
+                                }
+                            }
+                        },
+                        {
+                            "name": "enableTelemetry",
+                            "type": "Microsoft.Common.DropDown",
+                            "label": "Enable Telemetry",
+                            "subLabel": "",
+                            "defaultValue": "Yes",
+                            "toolTip": "Select Yes to enable Azure Local telemetry.",
+                            "constraints": {
+                                "required": true,
+                                "allowedValues": [
+                                    {
+                                        "label": "Yes",
+                                        "value": "Yes"
+                                    },
+                                    {
+                                        "label": "No",
+                                        "value": "No"
+                                    }
+                                ],
+                                "validations": []
+                            },
+                            "infoMessages": [],
+                            "visible": true
+                        },
+                        {
                             "name": "azureLocalInfo4",
                             "type": "Microsoft.Common.TextBlock",
                             "visible": true,
                             "options": {
-                                "text": "Data sent from scripts is hosted in Azure Application Insights service and collected in full transparency, since all code is visible in PowerShell Scripts on Github repository.",
+                                "text": "Data sent from scripts is hosted in Azure Application Insights service and collected in full transparency, since all code is visible in PowerShell Scripts on the Github repository.",
                                 "link": {
                                     "label": "Learn more about telemetry",
                                     "uri": "https://github.com/microsoft/MSLab/blob/master/Docs/mslab-telemetry.md"
@@ -1178,6 +1276,8 @@
                 "alreadyHaveAWindowsServerLicense": "[steps('basics').alreadyHaveAWindowsServerLicense]",
                 "azureLocalArchitecture": "[steps('azureLocalSettings').azureLocalArchitecture]",
                 "azureLocalMachineMemory": "[steps('azureLocalSettings').azureLocalMachineMemory]",
+                "installWAC": "[steps('azureLocalSettings').installWAC]",
+                "updateImages": "[steps('azureLocalSettings').updateImages]",
                 "telemetryLevel": "[steps('azureLocalSettings').telemetryLevel]",
                 "domainName": "[steps('azureLocalSettings').domainName]",
                 "autoShutdownStatus": "[steps('autoShutdown').autoShutdownStatus]",
