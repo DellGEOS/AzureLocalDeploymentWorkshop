@@ -1233,6 +1233,8 @@ configuration AzLWorkshop
                         foreach ($nic in $nics) {
                             Write-Host "Setting VLAN 711-719 on $($nic.Name) on $($_.Name)"
                             Set-VMNetworkAdapterVlan -VMNetworkAdapterName $($nic.Name) -VMName $($_.Name) -Trunk -AllowedVlanIdList "711-719" -NativeVlanId 0
+                            # Enable Device Naming for the NIC
+                            Set-VMNetworkAdapter -VMNetworkAdapterName $($nic.Name) -VMName $($_.Name) -DeviceNaming On
                         }
                     }
                 }
