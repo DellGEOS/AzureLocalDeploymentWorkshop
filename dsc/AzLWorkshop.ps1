@@ -1272,7 +1272,7 @@ configuration AzLWorkshop
                         Write-Host "No changes are necessary."
                     }
                 }
-                return @{ 'Result' = $result } | Out-Null
+                return @{ 'Result' = $result }
             }
             SetScript  = {
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
