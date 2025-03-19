@@ -855,8 +855,8 @@ configuration AzLWorkshop
                     $cert = Invoke-Command -ComputerName $GatewayServerName -ScriptBlock { Get-ChildItem Cert:\LocalMachine\My\ | Where-Object subject -eq "CN=WindowsAdminCenterSelfSigned" }
                     if ($cert) {
                         Write-Host "Exporting WAC certificate from $GatewayServerName onto DC."
-                    $cert | Export-Certificate -FilePath $env:TEMP\WACCert.cer
-                    Import-Certificate -FilePath $env:TEMP\WACCert.cer -CertStoreLocation Cert:\LocalMachine\Root\
+                        $cert | Export-Certificate -FilePath $env:TEMP\WACCert.cer
+                        Import-Certificate -FilePath $env:TEMP\WACCert.cer -CertStoreLocation Cert:\LocalMachine\Root\
                     }
                     # Disable Internet Explorer ESC for Admin
                     Write-Host "Disabling Internet Explorer Enhanced Security Configuration for Admin."
@@ -1233,8 +1233,6 @@ configuration AzLWorkshop
                         foreach ($nic in $nics) {
                             Write-Host "Setting VLAN 711-719 on $($nic.Name) on $($_.Name)"
                             Set-VMNetworkAdapterVlan -VMNetworkAdapterName $($nic.Name) -VMName $($_.Name) -Trunk -AllowedVlanIdList "711-719" -NativeVlanId 0
-                            Write-Host "Enabling Device Naming on $($nic.Name) on $($_.Name)"
-                            Set-VMNetworkAdapter -VMName $($_.Name) -Name $($nic.Name) -DeviceNaming On
                         }
                     }
                 }
@@ -1247,13 +1245,75 @@ configuration AzLWorkshop
             }
         }
 
-        # Create RDP file for the DC VM
-        # if $azureLocalArchitecture is either 'Single Machine' or '*Fully-Converged', $rdpDependsOn should be "[Script]Update DC", otherwse it should be "[Script]SetStorageVLANs"
-        $rdpDependsOn = switch ($azureLocalArchitecture) {
+        $updateAzLNicNamesDependsOn = switch ($azureLocalArchitecture) {
             { $_ -eq "Single Machine" -or $_ -like "*Fully-Converged" } { '[Script]Update DC' }
             Default { '[Script]SetStorageVLANs' }
         }
 
+        Script "UpdateAzLNicNames" {
+            GetScript  = {
+                $result = $true
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                # Retrieve the list of VMs where the name matches the $vmPrefix-AzL* pattern
+                Get-VM -Name "$Using:vmPrefix-AzL*" | ForEach-Object {
+                    # Check inside each VM using Invoke-Command to see if any of the network adapters have the name "Ethernet*"
+                    $ethernetCheck = Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock {
+                        $ethernetNics = Get-NetAdapter | Where-Object { $_.Name -like "Ethernet*" }
+                        return $ethernetNics
+                    }
+                    if ($ethernetCheck) {
+                        $result = $false
+                        $result = $result
+                        Write-Host "NICs with name like 'Ethernet' found in $($_.Name)"
+                        Write-Host "These names will be updated to ease deployment."
+                    }
+                    else {
+                        Write-Host "No NICs with name like 'Ethernet' found in $($_.Name)"
+                        Write-Host "No changes are necessary."
+                    }
+                }
+                return @{ 'Result' = $result } | Out-Null
+            }
+            SetScript  = {
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                Get-VM -Name "$Using:vmPrefix-AzL*" | ForEach-Object {
+                    $AzLNics = Get-VMNetworkAdapter -VMName $($_.Name)
+                    foreach ($nic in $AzLNics) {
+                        $formattedMac = $nic.MacAddress -replace '(.{2})(?!$)', '$1-'
+                        Write-Host "Updating NIC $($nic.Name) inside VM: $($_.Name)"
+                        Write-Host "NIC MAC Address: $formattedMac"
+                        # Identfiy if this is a storage NIC
+                        if ($nic.Name -like "Storage*") {
+                            Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock { 
+                                param($formattedMac, $nic)
+                                Get-NetAdapter -Physical | Where-Object { $_.MacAddress -eq $formattedMac } | Rename-NetAdapter -NewName "$($nic.Name)"
+                                Write-Host "Renamed NIC with MAC: $formattedMac to $($nic.Name)"
+                            } -ArgumentList $formattedMac, $nic
+                        }
+                        # Perform same update on the Management NICs, which are identified -notlike "Storage*"
+                        else {
+                            Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock { 
+                                param($formattedMac, $nic)
+                                # Identify the target NIC by matching the MAC address
+                                $targetNic = Get-NetAdapter -Physical | Where-Object { $_.MacAddress -eq $formattedMac }
+                                # Update the NIC name to match the existing -RegistryKeyword 'HyperVNetworkAdapterName'.DisplayValue value for that specific adapter
+                                $newName = (Get-NetAdapterAdvancedProperty -RegistryKeyword 'HyperVNetworkAdapterName' | Where-object { $_.Name -eq $targetNic.Name }).DisplayValue
+                                Rename-NetAdapter -Name $targetNic.Name -NewName $newName
+                                Write-Host "Renamed NIC with MAC: $formattedMac to $newName"
+                            } -ArgumentList $formattedMac, $nic
+                        }
+                    }
+                }
+            }
+            TestScript = {
+                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
+            }
+            DependsOn  = $updateAzLNicNamesDependsOn
+        }
+
+        # Create RDP file for the DC VM
         Script "Download RDP File" {
             GetScript  = {
                 $result = Test-Path -Path "$Using:rdpConfigPath"
@@ -1270,7 +1330,7 @@ configuration AzLWorkshop
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
-            DependsOn  = $rdpDependsOn
+            DependsOn  = "[Script]UpdateAzLNicNames"
         }
 
         Script "Edit RDP file" {
