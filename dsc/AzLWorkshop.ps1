@@ -849,22 +849,26 @@ configuration AzLWorkshop
                     $ProgressPreference = 'SilentlyContinue'
                     Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/media/azlwallpaper.png' -OutFile "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -UseBasicParsing
                     Set-GPPrefRegistryValue -Name "Default Domain Policy" -Context User -Action Replace -Key "HKCU\Control Panel\Desktop" -ValueName Wallpaper -Value "C:\Windows\Web\Wallpaper\Windows\azlwallpaper.png" -Type String
-                    # if $installWAC is 'Yes', update WAC certificate
-                    if ($Using:installWAC -eq 'Yes') {
-                        $GatewayServerName = "WAC"
-                        Start-Sleep 10
-                        $cert = Invoke-Command -ComputerName $GatewayServerName `
-                            -ScriptBlock { Get-ChildItem Cert:\LocalMachine\My\ | Where-Object subject -eq "CN=WindowsAdminCenterSelfSigned" }
-                        $cert | Export-Certificate -FilePath $env:TEMP\WACCert.cer
-                        Import-Certificate -FilePath $env:TEMP\WACCert.cer -CertStoreLocation Cert:\LocalMachine\Root\
+                    # if WAC VM exists and is running, update WAC certificate
+                    $GatewayServerName = "WAC"
+                    Start-Sleep 10
+                    $cert = Invoke-Command -ComputerName $GatewayServerName -ScriptBlock { Get-ChildItem Cert:\LocalMachine\My\ | Where-Object subject -eq "CN=WindowsAdminCenterSelfSigned" }
+                    if ($cert) {
+                        Write-Host "Exporting WAC certificate from $GatewayServerName onto DC."
+                    $cert | Export-Certificate -FilePath $env:TEMP\WACCert.cer
+                    Import-Certificate -FilePath $env:TEMP\WACCert.cer -CertStoreLocation Cert:\LocalMachine\Root\
                     }
                     # Disable Internet Explorer ESC for Admin
+                    Write-Host "Disabling Internet Explorer Enhanced Security Configuration for Admin."
                     Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Value 0 -Type Dword
                     # Disable Internet Explorer ESC for User
+                    Write-Host "Disabling Internet Explorer Enhanced Security Configuration for User."
                     Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Value 0 -Type Dword
                     # Disable Server Manager WAC Prompt
+                    Write-Host "Disabling Server Manager WAC Prompt."
                     Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ServerManager' -Name 'DoNotPopWACConsoleAtSMLaunch' -Value 1 -Type Dword
                     # Disable Network Profile Prompt
+                    Write-Host "Disabling Network Profile Prompt."
                     New-Item -Path 'HKLM:\System\CurrentControlSet\Control\Network\NewNetworkWindowOff' -Force | Out-Null
                     # Trigger an explorer restart to apply the wallpaper
                     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
