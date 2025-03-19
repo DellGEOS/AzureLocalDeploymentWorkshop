@@ -47,6 +47,7 @@ configuration AzLWorkshop
         [String]$wsIsoUri = "https://go.microsoft.com/fwlink/p/?LinkID=2195280"
         [String]$azureLocalIsoUri = "https://aka.ms/HCIReleaseImage"
         [String]$labConfigUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/labconfig/AzureLocalLabConfig.ps1"
+        #[String]$deployWACUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/wac/DeployWAC.ps1"
         [String]$rdpConfigUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/rdp/rdpbase.rdp"
 
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -730,8 +731,9 @@ configuration AzLWorkshop
                     Start-Sleep -Seconds 10
                     $result = Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
                         Write-Host "Checking if Windows Admin Center is installed and running..."
-                        [bool] ((Get-Service -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }) -and 
-                                (Get-Service -Name "WindowsAdminCenterAccountManagement" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }))
+                        [bool] (((Get-Service -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" })`
+                                    -and (Get-Service -Name "WindowsAdminCenterAccountManagement" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }))`
+                                -and (Test-NetConnection -ComputerName "localhost" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded)
                     }
                     # Write a message if the result is true, that installation must already be complete
                     if ($result) {
@@ -741,146 +743,67 @@ configuration AzLWorkshop
                 }
                 SetScript  = {
                     $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                    Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
-                        $retryCount = 0
-                        $maxRetries = 3
-                        while ($retryCount -lt $maxRetries) {
-                            try {
-                                function CheckTimeout {
-                                    param ([datetime]$timeout)
-                                    if ([DateTime]::Now -gt $timeout) {
-                                        throw "Windows Admin Center installation took too long. Uninstalling and trying again..."
-                                    }
+                    if (!(Test-Path -Path "$Using:flagsPath\StartWACDeploy.txt")) {
+                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
+                            if (-not (Test-Path -Path "C:\WindowsAdminCenter.exe")) {
+                                $ProgressPreference = 'SilentlyContinue'
+                                Write-Host "Downloading Windows Admin Center..."
+                                Invoke-WebRequest -Uri 'https://aka.ms/WACDownload' -OutFile "C:\WindowsAdminCenter.exe" -UseBasicParsing
+                            }
+                            <#
+                            if (-not (Test-Path -Path "C:\DeployWAC.ps1")) {
+                                $ProgressPreference = 'SilentlyContinue'
+                                Write-Host "Downloading Windows Admin Center deployment script..."
+                                Invoke-WebRequest -Uri "$Using:deployWACUri" -OutFile "C:\DeployWAC.ps1" -UseBasicParsing
+                            }
+                            #>
+                            Write-Host "Installing Windows Admin Center - this can take up to 10 minutes..."
+                            Start-Process -FilePath 'C:\WindowsAdminCenter.exe' -ArgumentList '/VERYSILENT /log=C:\WindowsAdminCenter.log'
+                            Write-Host "Windows Admin Center installation started. Checking again in 3 minutes."
+                        }
+                        # Create a flag to indicate the installation has started
+                        $wacStartedFlag = "$Using:flagsPath\StartWACDeploy.txt"
+                        New-Item $wacStartedFlag -ItemType file -Force
+                        Start-Sleep -Seconds 180
+                    }
+                    else {
+                        Write-Host "Windows Admin Center installation has already started. Moving on to check for completion."
+                    }
+                    if (!(Test-Path -Path "$Using:flagsPath\DeployWACComplete.txt")) {
+                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
+                            # Start checking for the installation to complete by checking for the log file for the "Log closed." message. This should run for a maximum of 10 minutes
+                            $timeout = 600
+                            $logCheck = Get-ChildItem -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue | Get-Content | Select-String "Log closed."
+                            while (-not $logCheck) {
+                                Write-Host "Checking for Windows Admin Center installation completion..."
+                                Start-Sleep -Seconds 20
+                                $timeout -= 20
+                                if ($timeout -le 0) {
+                                    throw "Windows Admin Center installation timed out."
                                 }
-                                $timeout = [DateTime]::Now.AddMinutes(12)
-                                while ([DateTime]::Now -lt $timeout) {
-                                    # Firstly, check if Windows Admin Center is already installed
-                                    # This is done by checking if the WindowsAdminCenter service is present and running, and also if Test-NetConnection to localhost on port 443 is successful
-                                    if ((Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue) -and (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue).Status -eq "Running" -and (Test-NetConnection -ErrorAction SilentlyContinue -ComputerName "localhost" -port 443).TcpTestSucceeded) {
-                                        Write-Host "Windows Admin Center is already installed and running."
+                                $logCheck = Get-ChildItem -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue | Get-Content | Select-String "Log closed."
+                            }
+                            # Check the Windows Admin Center key services using a foreach loop
+                            $services = @("WindowsAdminCenter", "WindowsAdminCenterAccountManagement")
+                            foreach ($service in $services) {
+                                $serviceStatus = Get-Service $service -ErrorAction SilentlyContinue
+                                if ($serviceStatus -and $serviceStatus.Status -ne "Running") {
+                                    Write-Host "Windows Admin Center is installed but the $service service is not running. Attempting to start the service."
+                                    Start-Service $service -ErrorAction Stop
+                                    if ((Get-Service $service -ErrorAction SilentlyContinue).Status -eq "Running") {
+                                        Write-Host "$service service started successfully."
+                                        Write-Host "Windows Admin Center is installed and running."
                                         return
                                     }
-                                    # Then check if the service is installed but not running
-                                    if (((Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue) -and (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue).Status -ne "Running") -and `
-                                    ((Get-Service WindowsAdminCenterAccountManagement -ErrorAction SilentlyContinue) -and (Get-Service WindowsAdminCenterAccountManagement -ErrorAction SilentlyContinue).Status -ne "Running")) {
-                                        Write-Host "WindowsAdminCenter and WindowsAdminCenterAccountManagement service appear to be installed but not running. Attempting to start the service every 10 seconds."
-                                        Start-Service WindowsAdminCenter -ErrorAction SilentlyContinue
-                                        Start-Service WindowsAdminCenterAccountManagement -ErrorAction SilentlyContinue
-                                        Start-Sleep -Seconds 10
-                                        CheckTimeout -timeout $timeout
-                                        continue
-                                    }
-                                    # If the service is not installed, check if the installation is in progress - this can be done by checking Get-Process returns WindowsAdminCenter and WindowsAdminCenter.tmp
-                                    if ((Get-Process -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue) -or `
-                                        (Get-Process -Name "WindowsAdminCenter.tmp" -ErrorAction SilentlyContinue) -or `
-                                        (Get-Process -Name "TrustedInstaller" -ErrorAction SilentlyContinue)) {
-                                        # Display which processes have been detected
-                                        $detectedProcesses = @()
-                                        if (Get-Process -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue) {
-                                            $detectedProcesses += "WindowsAdminCenter"
-                                        }
-                                        if (Get-Process -Name "WindowsAdminCenter.tmp" -ErrorAction SilentlyContinue) {
-                                            $detectedProcesses += "WindowsAdminCenter.tmp"
-                                        }
-                                        if (Get-Process -Name "TrustedInstaller" -ErrorAction SilentlyContinue) {
-                                            $detectedProcesses += "TrustedInstaller"
-                                        }
-                                        Write-Host "Detected running processes: $($detectedProcesses -join ', ')"
-                                        Write-Host "Windows Admin Center installation detected. Retrying in 20 seconds."
-                                        Start-Sleep -Seconds 20
-                                        CheckTimeout -timeout $timeout
-                                        continue
-                                    }
-                                    # If none of the above conditions are met, then Windows Admin Center is not installed and we need to install it
-                                    # Clean up old log files first by testing the path to see if the file exists, before deleting it
-                                    if (Test-Path -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue) {
-                                        Remove-Item -Path "C:\WindowsAdminCenter.log" -Force
-                                    }
-                                    # and for WAC uninstall log
-                                    if (Test-Path -Path "C:\WACUninstall.log" -ErrorAction SilentlyContinue) {
-                                        Remove-Item -Path "C:\WACUninstall.log" -Force
-                                    }
-                                    # Then, download the Windows Admin Center installer if it is not already present
-                                    Write-Host "Windows Admin Center not installed. Downloading the installer..."
-                                    if (-not (Test-Path -Path "C:\WindowsAdminCenter.exe")) {
-                                        $ProgressPreference = 'SilentlyContinue'
-                                        Write-Host "Downloading Windows Admin Center..."
-                                        Invoke-WebRequest -Uri 'https://aka.ms/WACDownload' -OutFile "C:\WindowsAdminCenter.exe" -UseBasicParsing
-                                    }
-                                    # Then install Windows Admin Center
-                                    Write-Host "Installing Windows Admin Center - this can take up to 10 minutes..."
-                                    if (-not (Get-Service WindowsAdminCenter -ErrorAction SilentlyContinue)) {
-                                        Start-Process -FilePath 'C:\WindowsAdminCenter.exe' -ArgumentList '/VERYSILENT /log=C:\WindowsAdminCenter.log'
-                                        Start-Sleep -Seconds 30
-                                    }
-                                    # Wait for the installation to complete
-                                    # Check the Get-Process to see if WindowsAdminCenter and WindowsAdminCenter.tmp installation services are present as this indicates that the install is happening
-                                    while ((Get-Process -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue) -or (Get-Process -Name "WindowsAdminCenter.tmp" -ErrorAction SilentlyContinue) -or (Get-Process -Name "TrustedInstaller" -ErrorAction SilentlyContinue)) {
-                                        Write-Host "Windows Admin Center installation in progress. Checking again in 20 seconds."
-                                        Start-Sleep -Seconds 20
-                                        # Check log file for "Log closed." to indicate installation is complete
-                                        $processComplete = Get-ChildItem -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue | Get-Content | Select-String "Log closed."
-                                        if ($processComplete) {
-                                            Write-Host "Windows Admin Center installation complete."
-                                            break
-                                        }
-                                        CheckTimeout -timeout $timeout
-                                    }
-                                }
-                            }
-                            catch {
-                                Write-Host "Installation failed. Attempting to uninstall and retry. Retry count: $($retryCount + 1)"
-                                # First check if the final WindowsAdminCenterAccountManagement service is running and stop it
-                                if ((Get-Service WindowsAdminCenterAccountManagement -ErrorAction SilentlyContinue) -and (Get-Service WindowsAdminCenterAccountManagement -ErrorAction SilentlyContinue).Status -eq "Running") {
-                                    Write-Host "Stopping Windows Admin Center Account Management service..."
-                                    Stop-Service WindowsAdminCenterAccountManagement -Force
-                                    Start-Sleep -Seconds 10
-                                }
-                                # Check if a previous installation is in progress and stop it
-                                if ((Get-Process -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue) -or (Get-Process -Name "WindowsAdminCenter.tmp" -ErrorAction SilentlyContinue) -or (Get-Process -Name "TrustedInstaller" -ErrorAction SilentlyContinue)) {
-                                    Write-Host "Stopping previous Windows Admin Center installation process..."
-                                    Stop-Process -Name "WindowsAdminCenter" -Force
-                                    Stop-Process -Name "WindowsAdminCenter.tmp" -Force
-                                    Stop-Process -Name "TrustedInstaller" -Force
-                                    Start-Sleep -Seconds 10
-                                }
-                                # Check if Windows Admin Center is installed and uninstall it
-                                # Search for Uninstall exe in C:\Program Files\WindowsAdminCenter\
-                                $uninstallPath = Get-ChildItem -Path "C:\Program Files\WindowsAdminCenter\" -Filter "unins*.exe" -ErrorAction SilentlyContinue | Select-Object -Last 1
-                                if ($uninstallPath) {
-                                    Start-Process -FilePath $uninstallPath.FullName -ArgumentList '/VERYSILENT /log=C:\WACUninstall.log'
-                                    Start-Sleep -seconds 30
-                                    $timeout = [DateTime]::Now.AddMinutes(7)
-                                    while ([DateTime]::Now -lt $timeout) {
-                                        do {
-                                            # Check if the unins*.exe process is still running
-                                            $uninstallProcess = Get-Process -Name "unins*.exe" -ErrorAction SilentlyContinue
-                                            if ($uninstallProcess) {
-                                                Write-Host "Windows Admin Center uninstallation in progress. Checking again in 20 seconds."
-                                                Start-Sleep -Seconds 20
-                                            }
-                                            CheckTimeout -timeout $timeout
-                                            Write-Host "Checking to see if Windows Admin Center uninstallation is complete..."
-                                            # Check to see if "unins*.exe" process has finished running and if the log file has "Log closed." to indicate uninstallation is complete
-                                            while ((Get-Process -Name "unins*" -ErrorAction SilentlyContinue)) {
-                                                Write-Host "Windows Admin Center uninstallation still in progress. Checking again in 20 seconds."
-                                                Start-Sleep -Seconds 20
-                                                # Check log file for "Log closed." to indicate installation is complete
-                                                $uninstallComplete = Get-ChildItem -Path "C:\WACUninstall.log" -ErrorAction SilentlyContinue | Get-Content | Select-String "Log closed."
-                                                if ($uninstallComplete) {
-                                                    break
-                                                }
-                                                CheckTimeout -timeout $timeout
-                                            }
-                                        } while (-not $uninstallComplete)
-                                    }
-                                    $retryCount++
                                 }
                             }
                         }
-                        if ($retryCount -eq $maxRetries) {
-                            throw "Failed to install Windows Admin Center after $maxRetries attempts."
-                        }
+                        $wacCompletedFlag = "$Using:flagsPath\DeployWACComplete.txt"
+                        New-Item $wacCompletedFlag -ItemType file -Force
+                    }
+                    else {
+                        Write-Host "Windows Admin Center installation has already completed."
+                        return
                     }
                 }
                 TestScript = {
@@ -891,7 +814,7 @@ configuration AzLWorkshop
                 DependsOn  = "[Script]Enable RDP on DC"
             }
         }
-        else {
+        else { 
             Write-Host "Skipping Windows Admin Center deployment as it was not selected."
         }
 
