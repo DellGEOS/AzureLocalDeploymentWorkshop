@@ -728,7 +728,6 @@ configuration AzLWorkshop
             Script "Deploy WAC" {
                 GetScript  = {
                     $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                    Start-Sleep -Seconds 10
                     $result = Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
                         Write-Host "Checking if Windows Admin Center is installed and running..."
                         [bool] (((Get-Service -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" })`
@@ -750,20 +749,13 @@ configuration AzLWorkshop
                                 Write-Host "Downloading Windows Admin Center..."
                                 Invoke-WebRequest -Uri 'https://aka.ms/WACDownload' -OutFile "C:\WindowsAdminCenter.exe" -UseBasicParsing
                             }
-                            <#
-                            if (-not (Test-Path -Path "C:\DeployWAC.ps1")) {
-                                $ProgressPreference = 'SilentlyContinue'
-                                Write-Host "Downloading Windows Admin Center deployment script..."
-                                Invoke-WebRequest -Uri "$Using:deployWACUri" -OutFile "C:\DeployWAC.ps1" -UseBasicParsing
-                            }
-                            #>
                             Write-Host "Installing Windows Admin Center - this can take up to 10 minutes..."
                             Start-Process -FilePath 'C:\WindowsAdminCenter.exe' -ArgumentList '/VERYSILENT /log=C:\WindowsAdminCenter.log'
                             Write-Host "Windows Admin Center installation started. Checking again in 3 minutes."
                         }
                         # Create a flag to indicate the installation has started
                         $wacStartedFlag = "$Using:flagsPath\StartWACDeploy.txt"
-                        New-Item $wacStartedFlag -ItemType file -Force
+                        New-Item $wacStartedFlag -ItemType file -Force | Out-Null
                         Start-Sleep -Seconds 180
                     }
                     else {
@@ -775,7 +767,7 @@ configuration AzLWorkshop
                             $timeout = 600
                             $logCheck = Get-ChildItem -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue | Get-Content | Select-String "Log closed."
                             while (-not $logCheck) {
-                                Write-Host "Checking for Windows Admin Center installation completion..."
+                                Write-Host "Checking every 20 seconds for Windows Admin Center installation completion..."
                                 Start-Sleep -Seconds 20
                                 $timeout -= 20
                                 if ($timeout -le 0) {
@@ -793,13 +785,24 @@ configuration AzLWorkshop
                                     if ((Get-Service $service -ErrorAction SilentlyContinue).Status -eq "Running") {
                                         Write-Host "$service service started successfully."
                                         Write-Host "Windows Admin Center is installed and running."
-                                        return
+                                        break
                                     }
                                 }
                             }
+                            $timeout = 600
+                            Write-Host "Checking if WAC is responding on port 443."
+                            while (!((Test-NetConnection -ComputerName "localhost" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded)) {
+                                Write-Host "WAC is not yet responding on port 443. Waiting 20 seconds"
+                                Start-Sleep -Seconds 20
+                                $timeout -= 20
+                                if ($timeout -le 0) {
+                                    throw "Windows Admin Center installation timed out."
+                                }
+                            }
                         }
+                        Write-Host "WAC Deployment complete!"
                         $wacCompletedFlag = "$Using:flagsPath\DeployWACComplete.txt"
-                        New-Item $wacCompletedFlag -ItemType file -Force
+                        New-Item $wacCompletedFlag -ItemType file -Force | Out-Null
                     }
                     else {
                         Write-Host "Windows Admin Center installation has already completed."
@@ -820,7 +823,7 @@ configuration AzLWorkshop
 
         $updateDCDependsOn = switch ($installWAC) {
             'Yes' { "[Script]Deploy WAC" }
-            'No'  { "[Script]Enable RDP on DC" }
+            'No' { "[Script]Enable RDP on DC" }
         }
 
         Script "Update DC" {
