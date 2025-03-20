@@ -290,7 +290,7 @@ configuration AzLWorkshop
 
         Script "Replace LabConfig" {
             GetScript  = {
-                $result = ((Get-Item $Using:labConfigPath).LastWriteTime -ge (Get-Date).ToUniversalTime())
+                $result = ((Get-Item $Using:labConfigPath).LastWriteTime -ge (Get-Date).ToUniversalTime() -and (Get-Item $Using:labConfigPath).Length -gt 10240)
                 return @{ 'Result' = $result }
             }
 
@@ -311,7 +311,7 @@ configuration AzLWorkshop
 
         Script "Edit LabConfig" {
             GetScript  = {
-                $result = ((Test-Path -Path "$Using:labConfigPath") -and (Test-Path -Path "$Using:flagsPath\LcUpdated.txt"))
+                $result = ((Test-Path -Path "$Using:labConfigPath") -and (Test-Path -Path "$Using:flagsPath\LabConfigUpdated.txt"))
                 return @{ 'Result' = $result }
             }
             SetScript  = {
@@ -338,7 +338,7 @@ configuration AzLWorkshop
                 }
 
                 Out-File -FilePath "$Using:labConfigPath" -InputObject $labConfigFile -Force
-                $LabConfigUpdatedFlag = "$Using:flagsPath\LcUpdated.txt"
+                $LabConfigUpdatedFlag = "$Using:flagsPath\LabConfigUpdated.txt"
                 New-Item $LabConfigUpdatedFlag -ItemType file -Force
             }
             TestScript = {
