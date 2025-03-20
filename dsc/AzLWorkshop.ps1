@@ -291,13 +291,15 @@ configuration AzLWorkshop
 
         Script "Replace LabConfig" {
             GetScript  = {
-                $result = ((Get-Item $Using:labConfigPath).LastWriteTime -ge (Get-Date))
+                $result = ((Get-Item $Using:labConfigPath).LastWriteTime.ToUniversalTime() -ge (Get-Date).ToUniversalTime())
                 return @{ 'Result' = $result }
             }
 
             SetScript  = {
                 $ProgressPreference = 'SilentlyContinue'
-                Invoke-WebRequest -Uri "$Using:labConfigUri" -OutFile "$Using:labConfigPath" -UseBasicParsing
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                $client = New-Object System.Net.WebClient
+                $client.DownloadFile("$Using:labConfigUri", "$Using:labConfigPath")
             }
 
             TestScript = {
@@ -310,10 +312,9 @@ configuration AzLWorkshop
 
         Script "Edit LabConfig" {
             GetScript  = {
-                $result = !(Test-Path -Path "$Using:labConfigPath")
+                $result = ((Test-Path -Path "$Using:labConfigPath") -and (Test-Path -Path "$Using:flagsPath\LcUpdated.txt"))
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 $labConfigFile = Get-Content -Path "$Using:labConfigPath"
                 $labConfigFile = $labConfigFile.Replace("<<DomainAdminName>>", $Using:domainAdminName)
@@ -338,8 +339,9 @@ configuration AzLWorkshop
                 }
 
                 Out-File -FilePath "$Using:labConfigPath" -InputObject $labConfigFile -Force
+                $LabConfigUpdatedFlag = "$Using:flagsPath\LcUpdated.txt"
+                New-Item $LabConfigUpdatedFlag -ItemType file -Force
             }
-
             TestScript = {
                 # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                 $state = [scriptblock]::Create($GetScript).Invoke()
