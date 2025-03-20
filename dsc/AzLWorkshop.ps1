@@ -47,7 +47,6 @@ configuration AzLWorkshop
         [String]$wsIsoUri = "https://go.microsoft.com/fwlink/p/?LinkID=2195280"
         [String]$azureLocalIsoUri = "https://aka.ms/HCIReleaseImage"
         [String]$labConfigUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/labconfig/AzureLocalLabConfig.ps1"
-        #[String]$deployWACUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/wac/DeployWAC.ps1"
         [String]$rdpConfigUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/rdp/rdpbase.rdp"
 
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -291,7 +290,7 @@ configuration AzLWorkshop
 
         Script "Replace LabConfig" {
             GetScript  = {
-                $result = ((Get-Item $Using:labConfigPath).LastWriteTime.ToUniversalTime() -ge (Get-Date).ToUniversalTime())
+                $result = ((Get-Item $Using:labConfigPath).LastWriteTime -ge (Get-Date).ToUniversalTime())
                 return @{ 'Result' = $result }
             }
 
@@ -686,6 +685,87 @@ configuration AzLWorkshop
             }
             DependsOn  = "[Script]MSLab CreateParentDisks"
         }
+
+        <# To do: Update Azl node IP address on Management1 on each node, disable DHCP on all NICs
+        # Need to get the DHCP scope, subnet mask, and gateway from the DC VM and start at .11 for the first node and go on from there
+        # Same for WAC VM but this can have .10 as it's static IP
+        # Need to create A-records for the AzL machines in the DNS server that use the static IPs
+
+        Script "Set Static IPs" {
+            GetScript  = {
+                # Invoke-Command against the DC VM to test ping to the AzL nodes and check for response
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                    foreach ($vm in $Using:azureLocalMachines) {
+                        $vmName = "AzL$vm"
+                        $pingResults += Test-Connection -ComputerName $vmName -Count 1 -Quiet
+                    }
+                    return $pingResults
+                }
+                
+            }
+
+            SetScript  = {
+                # Get the scope from DHCP by running an Invoke-Command against the DC VM
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                    $DhcpScope = Get-DhcpServerv4Scope
+                    $shortDhcpScope = (Get-DhcpServerv4Scope).Substring(0, $DhcpScope.Length - 1)
+                    # Start the scope at 50 to allow for Deployments with SDN optional services
+                    # As per here: https://learn.microsoft.com/en-us/azure/azure-local/plan/three-node-ip-requirements?view=azloc-24113#deployments-with-sdn-optional-services
+                    $newIpStartRange = ($shortDhcpScope + "50")
+                    $newIpEndRange = ($shortDhcpScope + "254")
+                    $subnetMask = $DhcpScope.SubnetMask
+                    $gateway = $DhcpScope.IpRangeStart
+                    $dnsAddress = $DhcpScope
+                    Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $newIpEndRange
+                    return $shortDhcpScope, $subnetMask, $gateway, $dnsAddress
+                }
+                # Starting at .11 for the first node, define the IP range for the AzL nodes based on the $azureLocalMachines variable
+                $ipStart = $shortDhcpScope + 11
+                $ipEnd = $ipStart + $Using:azureLocalMachines - 1
+                $ipRange = $ipStart..$ipEnd
+                # Need to cycle through the AzL VMs and set their static IPs using Invoke-Command against each VM
+                # The VM NIC will always be the Management1 NIC. The Management2 NIC should have DHCP disabled
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                foreach ($vm in $Using:azureLocalMachines) {
+                    $vmName = "$Using:vmPrefix-AzL$vm"
+                    $vmIpAddress = $ipRange[$vm - 1]
+                    Invoke-Command -VMName $vmName -Credential $scriptCredential -ScriptBlock {
+                        # Disable DHCP on all NICs
+                        Get-NetAdapter | Set-NetIPInterface -InterfaceIndex -Dhcp Disabled -Confirm:$false
+                        # Set the static IP on the Management1 NIC
+                        $Index = (Get-NetAdapter -Name 'Management1').ifIndex
+                        $IP = "$Using:shortDhcpScope.$Using:vmIpAddress"
+                        $Prefix = (Get-NetIPAddress -InterfaceIndex $Index).PrefixLength
+                        $GW = $Using:gateway
+                        $DNSServers = $Using:dnsAddress
+                        New-NetIPAddress -InterfaceIndex $Index -AddressFamily IPv4 -IPAddress $IP -PrefixLength $Prefix -DefaultGateway $GW -ErrorAction Stop
+                        Set-DnsClientServerAddress -InterfaceIndex $index -ServerAddresses $DNSServers
+                    }
+                }
+                # Need to create A records in DNS for each of the AzL VMs
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                    foreach ($vm in $Using:azureLocalMachines) {
+                        $vmName = "AzL$vm"
+                        $vmIpAddress = $ipRange[$vm - 1]
+                        Add-DnsServerResourceRecordA -ZoneName $Using:domainName -Name $vmName -IPv4Address "$Using:shortDhcpScope.$vmIpAddress" -CreatePtr
+                    }
+                }
+            }
+            TestScript = {
+                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
+            }
+            DependsOn  = "[Script]MSLab DeployEnvironment"
+        }
+
+        #>
+
+
+
 
         if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
             $azureUsername = $($Admincreds.UserName)
