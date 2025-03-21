@@ -311,7 +311,7 @@ configuration AzLWorkshop
 
         Script "Edit LabConfig" {
             GetScript  = {
-                $result = ((Test-Path -Path "$Using:labConfigPath"))
+                $result = !(Test-Path -Path "$Using:labConfigPath")
                 return @{ 'Result' = $result }
             }
             SetScript  = {
