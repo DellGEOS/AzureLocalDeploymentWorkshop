@@ -710,7 +710,7 @@ configuration AzLWorkshop
                 if ($Using:installWAC -eq 'Yes') {
                     $vms = $using:vms + 'WAC'
                 }
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                $pingTest = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
                     foreach ($vm in $Using:vms) {
                         # Create $pingTest array to store the results of the Test-NetConnection
                         $pingTest = @()
@@ -727,6 +727,7 @@ configuration AzLWorkshop
                     }
                     return $result
                 }
+                return @{ 'Result' = $pingTest }
             }
             SetScript  = {
                 # Get the scope from DHCP by running an Invoke-Command against the DC VM
