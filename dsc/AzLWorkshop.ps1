@@ -311,7 +311,7 @@ configuration AzLWorkshop
 
         Script "Edit LabConfig" {
             GetScript  = {
-                $result = ((Test-Path -Path "$Using:labConfigPath") -and (Test-Path -Path "$Using:flagsPath\LabConfigUpdated.txt"))
+                $result = ((Test-Path -Path "$Using:labConfigPath"))
                 return @{ 'Result' = $result }
             }
             SetScript  = {
@@ -338,8 +338,8 @@ configuration AzLWorkshop
                 }
 
                 Out-File -FilePath "$Using:labConfigPath" -InputObject $labConfigFile -Force
-                $LabConfigUpdatedFlag = "$Using:flagsPath\LabConfigUpdated.txt"
-                New-Item $LabConfigUpdatedFlag -ItemType file -Force
+                #$LabConfigUpdatedFlag = "$Using:flagsPath\LabConfigUpdated.txt"
+                #New-Item $LabConfigUpdatedFlag -ItemType file -Force
             }
             TestScript = {
                 # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
@@ -686,7 +686,18 @@ configuration AzLWorkshop
             DependsOn  = "[Script]MSLab CreateParentDisks"
         }
 
-        <# To do: Update Azl node IP address on Management1 on each node, disable DHCP on all NICs
+        # Create a switch statement to populate the $vms paremeter based on the the $azureLocalMachines number. $vms should be an array of strings containing the names of the VMs that will be created.
+        # The VM name that is used during the deployment is based on the $vmPrefix variable, which is set in the labconfig file and should only include the AzL VMs and not include the DC or WAC VMs.
+        # The range of $azureLocalMachines is 1-4
+        $vms = @()
+        switch ($azureLocalMachines) {
+            1 { $vms = @("AzL1") }
+            2 { $vms = @("AzL1", "AzL2") }
+            3 { $vms = @("AzL1", "AzL2", "AzL3") }
+            4 { $vms = @("AzL1", "AzL2", "AzL3", "AzL4") }
+        }
+
+        # To do: Update Azl node IP address on Management1 on each node, disable DHCP on all NICs
         # Need to get the DHCP scope, subnet mask, and gateway from the DC VM and start at .11 for the first node and go on from there
         # Same for WAC VM but this can have .10 as it's static IP
         # Need to create A-records for the AzL machines in the DNS server that use the static IPs
@@ -694,63 +705,141 @@ configuration AzLWorkshop
         Script "Set Static IPs" {
             GetScript  = {
                 # Invoke-Command against the DC VM to test ping to the AzL nodes and check for response
-                $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
-                    foreach ($vm in $Using:azureLocalMachines) {
-                        $vmName = "AzL$vm"
-                        $pingResults += Test-Connection -ComputerName $vmName -Count 1 -Quiet
-                    }
-                    return $pingResults
+                $result = $false
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                if ($Using:installWAC -eq 'Yes') {
+                    $vms = $using:vms + 'WAC'
                 }
-                
+                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                    foreach ($vm in $Using:vms) {
+                        # Create $pingTest array to store the results of the Test-NetConnection
+                        $pingTest = @()
+                        $vmName = $vm
+                        Write-Host "Pinging $vmName"
+                        $pingTest += (Test-NetConnection -ComputerName $vmName).PingSucceeded
+                    }
+                    # If all the pings are successful, return $true
+                    if ($pingTest -contains $false) {
+                        $result = $false
+                    }
+                    else {
+                        $result = $true
+                    }
+                    return $result
+                }
             }
-
             SetScript  = {
                 # Get the scope from DHCP by running an Invoke-Command against the DC VM
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                # Capture the returned values from Invoke-Command
+                $returnedValues = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
                     $DhcpScope = Get-DhcpServerv4Scope
-                    $shortDhcpScope = (Get-DhcpServerv4Scope).Substring(0, $DhcpScope.Length - 1)
+                    $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
                     # Start the scope at 50 to allow for Deployments with SDN optional services
                     # As per here: https://learn.microsoft.com/en-us/azure/azure-local/plan/three-node-ip-requirements?view=azloc-24113#deployments-with-sdn-optional-services
-                    $newIpStartRange = ($shortDhcpScope + "50")
-                    $newIpEndRange = ($shortDhcpScope + "254")
-                    $subnetMask = $DhcpScope.SubnetMask
-                    $gateway = $DhcpScope.IpRangeStart
-                    $dnsAddress = $DhcpScope
-                    Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $newIpEndRange
-                    return $shortDhcpScope, $subnetMask, $gateway, $dnsAddress
+                    $newIpStartRange = ($shortDhcpScope + ".50")
+                    $subnetMask = $DhcpScope.SubnetMask.IPAddressToString
+                    $gateway = (Get-DhcpServerv4OptionValue -ScopeId $DhcpScope.ScopeId -OptionId 3).Value
+                    $dnsServers = (Get-DhcpServerv4OptionValue -ScopeId $DhcpScope.ScopeId -OptionId 6).Value
+                    Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $DhcpScope.EndRange
+                    return $shortDhcpScope, $subnetMask, $gateway, $dnsServers
                 }
+
+                # Assign the returned values to individual variables
+                $shortDhcpScope = $returnedValues[0]
+                $subnetMask = $returnedValues[1]
+                $gateway = $returnedValues[2]
+                $dnsServers = $returnedValues[3]
+
                 # Starting at .11 for the first node, define the IP range for the AzL nodes based on the $azureLocalMachines variable
-                $ipStart = $shortDhcpScope + 11
-                $ipEnd = $ipStart + $Using:azureLocalMachines - 1
-                $ipRange = $ipStart..$ipEnd
+                $AzLIpStart = ([ipaddress]("$shortDhcpScope.11"))
+                $AzLIpRange = @()
+                for ($i = 0; $i -lt $Using:azureLocalMachines; $i++) {
+                    $ipBytes = $AzLIpStart.GetAddressBytes()
+                    $ipBytes[3] += $i
+                    $AzLIpRange += [ipaddress]::new($ipBytes)
+                }
+                
+                # Create a hashtable to store the AzL VMs and their IP addresses
+                $AzLIpMap = @{} # Initialize as a hashtable
+                # Iterate through the arrays to create the mapping
+                for ($i = 0; $i -lt $vms.Length; $i++) {
+                    $AzLIpMap[$vms[$i]] = $AzLIpRange[$i].IPAddressToString
+                }
+                # Sort the hashtable by $vms and ensure it remains a hashtable
+                $AzLIpMap = [ordered]@{}
+                foreach ($vm in $vms | Sort-Object) {
+                    $AzLIpMap[$vm] = $AzLIpRange[$vms.IndexOf($vm)].IPAddressToString
+                }
+                
+                if ($Using:installWAC -eq 'Yes') {
+                    $wacIP = [ipaddress]("$shortDhcpScope.10")
+                    $AzLIpMap.Add('WAC', $wacIP.IPAddressToString)
+                }
+
+                # Need to convert subnet mask to -PrefixLength
+                $subnetAsPrefix = $null
+                if ($subnetMask -as [int]) {
+                    [ipaddress]$out = 0
+                    $out.Address = ([UInt32]::MaxValue) -shl (32 - $subnetMask) -shr (32 - $subnetMask)
+                    $out.IPAddressToString
+                }
+                elseif ($subnetMask = $subnetMask -as [ipaddress]) {
+                    $subnetMask.IPAddressToString.Split('.') | ForEach-Object {
+                        $currentValue = $_
+                        while ($currentValue -ne 0) {
+                            $subnetAsPrefix++
+                            $currentValue = ($currentValue -shl 1) -band [byte]::MaxValue
+                        }
+                    }
+                    $subnetAsPrefix -as [string]
+                }
+
                 # Need to cycle through the AzL VMs and set their static IPs using Invoke-Command against each VM
                 # The VM NIC will always be the Management1 NIC. The Management2 NIC should have DHCP disabled
-                $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                foreach ($vm in $Using:azureLocalMachines) {
-                    $vmName = "$Using:vmPrefix-AzL$vm"
-                    $vmIpAddress = $ipRange[$vm - 1]
+                $scriptCredential = New-Object System.Management.Automation.PSCredential (".\Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                Write-Host "Setting Static IPs for AzL VMs"
+                foreach ($vm in $AzLIpMap.Keys) {
+                    $vmName = "$Using:vmPrefix-$vm"
+                    $vmIpAddress = $AzLIpMap[$vm]
                     Invoke-Command -VMName $vmName -Credential $scriptCredential -ScriptBlock {
+                        Write-Host "Enable PING through the firewall"
+                        # Enable PING through the firewall
+                        Enable-NetFirewallRule -displayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
+                        Enable-NetFirewallRule -displayName "File and Printer Sharing (Echo Request - ICMPv6-In)"
                         # Disable DHCP on all NICs
-                        Get-NetAdapter | Set-NetIPInterface -InterfaceIndex -Dhcp Disabled -Confirm:$false
-                        # Set the static IP on the Management1 NIC
-                        $Index = (Get-NetAdapter -Name 'Management1').ifIndex
-                        $IP = "$Using:shortDhcpScope.$Using:vmIpAddress"
-                        $Prefix = (Get-NetIPAddress -InterfaceIndex $Index).PrefixLength
-                        $GW = $Using:gateway
-                        $DNSServers = $Using:dnsAddress
-                        New-NetIPAddress -InterfaceIndex $Index -AddressFamily IPv4 -IPAddress $IP -PrefixLength $Prefix -DefaultGateway $GW -ErrorAction Stop
-                        Set-DnsClientServerAddress -InterfaceIndex $index -ServerAddresses $DNSServers
+                        Get-NetAdapter | Set-NetIPInterface -Dhcp Disabled -Confirm:$false
+                        foreach ($N in (Get-NetAdapterAdvancedProperty -DisplayName "Hyper-V Network Adapter Name" | Where-Object DisplayValue -NotLike "")) {
+                            Write-Host "$($Using:vmName): Renaming NIC: $($N.Name) to $($n.DisplayValue)"
+                            $N | Rename-NetAdapter -NewName $n.DisplayValue
+                        }
+                        $adapter = Get-NetAdapter -Name 'Management1' -ErrorAction SilentlyContinue
+                        # Check if IP address is already set
+                        if ($adapter | Get-NetIPAddress -IPAddress "$Using:vmIpAddress" -ErrorAction SilentlyContinue) {
+                            $adapter | Remove-NetIPAddress -Confirm:$false
+                        }
+                        # Check if Default Gateway is already set - using Get-NetRoute
+                        if ($adapter | Get-NetRoute -NextHop "$Using:gateway" -ErrorAction SilentlyContinue) {
+                            $adapter | Remove-NetRoute -NextHop "$Using:gateway" -Confirm:$false
+                        }
+                        Write-Host "$($Using:vmName): Setting Management1 static IP address to $($Using:vmIpAddress)"
+                        $adapter | New-NetIPAddress -IPAddress "$Using:vmIpAddress" -DefaultGateway "$Using:gateway" -PrefixLength $Using:subnetAsPrefix -ErrorAction Stop
+                        Write-host "Setting Management1 DNS Servers to $($Using:dnsServers)"
+                        $adapter | Set-DnsClientServerAddress -ServerAddresses $Using:dnsServers
                     }
                 }
                 # Need to create A records in DNS for each of the AzL VMs
+                Write-Host "Creating DNS Records for AzL VMs"
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
-                    foreach ($vm in $Using:azureLocalMachines) {
-                        $vmName = "AzL$vm"
-                        $vmIpAddress = $ipRange[$vm - 1]
-                        Add-DnsServerResourceRecordA -ZoneName $Using:domainName -Name $vmName -IPv4Address "$Using:shortDhcpScope.$vmIpAddress" -CreatePtr
+                    foreach ($vm in $($Using:AzLIpMap.Keys)) {
+                        Write-Host "Updating DNS Record for $vm"
+                        $vmIpAddress = $($Using:AzLIpMap)[$vm]
+                        $dnsCheck = Get-DnsServerResourceRecord -Name $vm -ZoneName $Using:domainName -ErrorAction SilentlyContinue
+                        if ($dnsCheck) {
+                            $dnsCheck | Remove-DnsServerResourceRecord -ZoneName $Using:domainName -Force
+                        }
+                        Add-DnsServerResourceRecordA -Name $vm -ZoneName $Using:domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
                     }
                 }
             }
@@ -761,11 +850,6 @@ configuration AzLWorkshop
             }
             DependsOn  = "[Script]MSLab DeployEnvironment"
         }
-
-        #>
-
-
-
 
         if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
             $azureUsername = $($Admincreds.UserName)
@@ -896,7 +980,7 @@ configuration AzLWorkshop
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
-                DependsOn  = "[Script]Enable RDP on DC"
+                DependsOn  = "[Script]Set Static IPs"
             }
         }
         else { 
@@ -963,17 +1047,6 @@ configuration AzLWorkshop
                 return $state.Result
             }
             DependsOn  = $updateDCDependsOn
-        }
-
-        # Create a switch statement to populate the $vms paremeter based on the the $azureLocalMachines number. $vms should be an array of strings containing the names of the VMs that will be created.
-        # The VM name that is used during the deployment is based on the $vmPrefix variable, which is set in the labconfig file and should only include the AzL VMs and not include the DC or WAC VMs.
-        # The range of $azureLocalMachines is 1-4
-
-        switch ($azureLocalMachines) {
-            1 { $vms = @("AzL1") }
-            2 { $vms = @("AzL1", "AzL2") }
-            3 { $vms = @("AzL1", "AzL2", "AzL3") }
-            4 { $vms = @("AzL1", "AzL2", "AzL3", "AzL4") }
         }
 
         # Create the Host vSwitches and vNICs to align with the desired azureLocalArchitecture
