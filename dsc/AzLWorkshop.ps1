@@ -833,7 +833,7 @@ configuration AzLWorkshop
                         Add-DnsServerResourceRecordA -Name $vm -ZoneName $domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
                     }
                 }
-                Create a flag to indicate the static IPs have been set
+                # Create a flag to indicate the static IPs have been set
                 $staticIpFlag = "$Using:flagsPath\StaticIpComplete.txt"
                 New-Item $staticIpFlag -ItemType file -Force
             }
