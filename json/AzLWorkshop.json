@@ -440,7 +440,7 @@
     },
     "variables": {
         "dataDisksCount": 8,
-        "dscUri": "https://github.com/DellGEOS/AzureLocalDeploymentWorkshop/raw/main/dsc/AzureLocalWorkshop.zip",
+        "dscUri": "https://github.com/DellGEOS/AzureLocalDeploymentWorkshop/raw/main/dsc/AzLWorkshop.zip",
         "artifactsLocation": "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/",
         "randomGUID": "[substring(uniqueString(subscription().subscriptionId, resourceGroup().id, parameters('virtualMachineName')),0,6)]",
         "dnsNameForPublicIP": "[toLower(concat(parameters('virtualMachineName'), variables('randomGUID')))]",
