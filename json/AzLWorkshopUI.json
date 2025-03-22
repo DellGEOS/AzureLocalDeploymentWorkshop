@@ -1252,7 +1252,7 @@
                 "alreadyHaveAWindowsServerLicense": "[steps('basics').alreadyHaveAWindowsServerLicense]",
                 "azureLocalArchitecture": "[steps('azureLocalSettings').azureLocalArchitecture]",
                 "azureLocalMachineMemory": "[steps('azureLocalSettings').azureLocalMachineMemory]",
-                "installWindowsAdminCenter": "[steps('azureLocalSettings').installWindowsAdminCenter",
+                "installWindowsAdminCenter": "[steps('azureLocalSettings').installWindowsAdminCenter]",
                 "updateImages": "[steps('azureLocalSettings').updateImages]",
                 "telemetryLevel": "[steps('azureLocalSettings').telemetryLevel]",
                 "domainName": "[steps('azureLocalSettings').domainName]",
