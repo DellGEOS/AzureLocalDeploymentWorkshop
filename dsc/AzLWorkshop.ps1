@@ -704,26 +704,7 @@ configuration AzLWorkshop
 
         Script "Set Static IPs" {
             GetScript  = {
-                # Invoke-Command against the DC VM to test ping to the AzL nodes and check for response
-                $result = $false
-                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                if ($Using:installWAC -eq 'Yes') {
-                    $updatedVmArray = $using:vms + 'WAC'
-                }
-                else {
-                    $updatedVmArray = $using:vms
-                }
-                $result = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
-                    $updatedVmArray = $using:updatedVmArray
-                    $result = $true
-                    foreach ($v in $updatedVmArray) {
-                        Write-Host "Pinging VM: $v"
-                        if ((Test-NetConnection -ComputerName $v -ErrorAction SilentlyContinue -WarningAction SilentlyContinue).PingSucceeded -eq $false) {
-                            $result = $false
-                        }
-                    }
-                    return $result
-                }
+                $result = (Test-Path -Path "$Using:flagsPath\StaticIPsSet.txt")
                 return @{ 'Result' = $result }
             }
             SetScript  = {
@@ -840,6 +821,9 @@ configuration AzLWorkshop
                         Add-DnsServerResourceRecordA -Name $vm -ZoneName $Using:domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
                     }
                 }
+                # Create a flag to indicate the static IPs have been set
+                $staticIpFlag = "$Using:flagsPath\StaticIpComplete.txt"
+                New-Item $staticIpFlag -ItemType file -Force
             }
             TestScript = {
                 # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
