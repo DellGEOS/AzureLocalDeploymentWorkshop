@@ -470,18 +470,6 @@
                             "infoMessages": [],
                             "visible": true
                         },
-                                                {
-                            "name": "domainNameInfo",
-                            "type": "Microsoft.Common.TextBlock",
-                            "visible": true,
-                            "options": {
-                                "text": "Choose whether you wish to install Windows Admin Center in your Azure Local environment. This can be used to perform additional management tasks against your Azure Local machines and instance.",
-                                "link": {
-                                    "label": "",
-                                    "uri": ""
-                                }
-                            }
-                        },
                         {
                             "name": "domainName",
                             "type": "Microsoft.Common.TextBox",
@@ -572,7 +560,7 @@
                             "type": "Microsoft.Common.TextBlock",
                             "visible": true,
                             "options": {
-                                "text": "Choose to opt-in to telemetry collection to better understand impact of the Azure Local Workshop/MSLab scripts i.e. number of VMs deployed, where MSLab is being used etc. Data sent from scripts are hosted in Azure Application Insights service and it is absolutely transparent what information is being collected, since all code is visible in PowerShell Scripts on Github repository.",
+                                "text": "Choose to opt-in to telemetry collection to better understand impact of the Azure Local Workshop/MSLab scripts.",
                                 "link": {
                                     "label": "",
                                     "uri": ""
@@ -584,7 +572,7 @@
                             "type": "Microsoft.Common.DropDown",
                             "label": "Telemetry Level",
                             "subLabel": "",
-                            "defaultValue": "Full",
+                            "defaultValue": "None",
                             "toolTip": "",
                             "constraints": {
                                 "required": true,
@@ -612,7 +600,7 @@
                             "type": "Microsoft.Common.TextBlock",
                             "visible": true,
                             "options": {
-                                "text": "Data sent from scripts is hosted in Azure Application Insights service and collected in full transparency, since all code is visible in PowerShell Scripts on the Github repository.",
+                                "text": "Telemetry includes number of VMs deployed, where MSLab is being used etc. Data sent from scripts are hosted in Azure Application Insights service and it is absolutely transparent what information is being collected, since all code is visible in PowerShell Scripts on Github repository.",
                                 "link": {
                                     "label": "Learn more about telemetry",
                                     "uri": "https://github.com/microsoft/MSLab/blob/master/Docs/mslab-telemetry.md"
