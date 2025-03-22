@@ -4,7 +4,7 @@
     "parameters": {
         "virtualMachineName": {
             "type": "string",
-            "defaultValue": "HybridHost001",
+            "defaultValue": "AzLHostVM001",
             "metadata": {
                 "description": "Provide a name for your Azure VM. This VM name should be less than 15 characters"
             }
