@@ -555,26 +555,26 @@
                             }
                         },
                         {
-                            "name": "enableTelemetry",
+                            "name": "telemetryLevel",
                             "type": "Microsoft.Common.DropDown",
-                            "label": "Enable Telemetry",
+                            "label": "Telemetry Level",
                             "subLabel": "",
-                            "defaultValue": "None",
-                            "toolTip": "Choose your preferred level of telemetry for the Azure Local workshop deployment.",
+                            "defaultValue": "Full",
+                            "toolTip": "",
                             "constraints": {
                                 "required": true,
                                 "allowedValues": [
                                     {
-                                        "label": "Full",
-                                        "value": "Full"
+                                        "label": "None",
+                                        "value": "None"
                                     },
                                     {
                                         "label": "Basic",
                                         "value": "Basic"
                                     },
                                     {
-                                        "label": "None",
-                                        "value": "None"
+                                        "label": "Full",
+                                        "value": "Full"
                                     }
                                 ],
                                 "validations": []
@@ -605,34 +605,6 @@
                                 "regex": "^(?!:\/\/)(?!-)([a-zA-Z0-9-_]+\\.)?[a-zA-Z0-9][a-zA-Z0-9-_]+\\.[a-zA-Z]{2,11}?$",
                                 "validationMessage": "Please enter a valid domain name, in the format azl.lab, or corp.azl.lab. A maximum of a single subdomain is supported."
                             },
-                            "visible": true
-                        },
-                        {
-                            "name": "telemetryLevel",
-                            "type": "Microsoft.Common.DropDown",
-                            "label": "Telemetry Level",
-                            "subLabel": "",
-                            "defaultValue": "Full",
-                            "toolTip": "",
-                            "constraints": {
-                                "required": true,
-                                "allowedValues": [
-                                    {
-                                        "label": "None",
-                                        "value": "None"
-                                    },
-                                    {
-                                        "label": "Basic",
-                                        "value": "Basic"
-                                    },
-                                    {
-                                        "label": "Full",
-                                        "value": "Full"
-                                    }
-                                ],
-                                "validations": []
-                            },
-                            "infoMessages": [],
                             "visible": true
                         }
                     ]
