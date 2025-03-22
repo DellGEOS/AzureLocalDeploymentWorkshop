@@ -470,6 +470,31 @@
                             "infoMessages": [],
                             "visible": true
                         },
+                                                {
+                            "name": "domainNameInfo",
+                            "type": "Microsoft.Common.TextBlock",
+                            "visible": true,
+                            "options": {
+                                "text": "Choose whether you wish to install Windows Admin Center in your Azure Local environment. This can be used to perform additional management tasks against your Azure Local machines and instance.",
+                                "link": {
+                                    "label": "",
+                                    "uri": ""
+                                }
+                            }
+                        },
+                        {
+                            "name": "domainName",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Domain Name",
+                            "defaultValue": "azl.lab",
+                            "toolTip": "The preferred domain name for the environment. This must be a valid domain name with a maximum of one subdomain, and will be used to create the Active Directory domain.",
+                            "constraints": {
+                                "required": true,
+                                "regex": "^(?!:\/\/)(?!-)([a-zA-Z0-9-_]+\\.)?[a-zA-Z0-9][a-zA-Z0-9-_]+\\.[a-zA-Z]{2,11}?$",
+                                "validationMessage": "Please enter a valid domain name, in the format azl.lab, or corp.azl.lab. A maximum of a single subdomain is supported."
+                            },
+                            "visible": true
+                        },
                         {
                             "name": "azureLocalInfoWAC",
                             "type": "Microsoft.Common.TextBlock",
@@ -593,19 +618,6 @@
                                     "uri": "https://github.com/microsoft/MSLab/blob/master/Docs/mslab-telemetry.md"
                                 }
                             }
-                        },
-                        {
-                            "name": "domainName",
-                            "type": "Microsoft.Common.TextBox",
-                            "label": "Domain Name",
-                            "defaultValue": "azl.lab",
-                            "toolTip": "The preferred domain name for the environment. This must be a valid domain name with a maximum of one subdomain, and will be used to create the Active Directory domain.",
-                            "constraints": {
-                                "required": true,
-                                "regex": "^(?!:\/\/)(?!-)([a-zA-Z0-9-_]+\\.)?[a-zA-Z0-9][a-zA-Z0-9-_]+\\.[a-zA-Z]{2,11}?$",
-                                "validationMessage": "Please enter a valid domain name, in the format azl.lab, or corp.azl.lab. A maximum of a single subdomain is supported."
-                            },
-                            "visible": true
                         }
                     ]
                 },
