@@ -760,7 +760,7 @@ configuration AzLWorkshop
                 }
 
                 Write-Host "VM to IP Mappings:"
-                $AzLIpMap
+                Write-Host "$AzLIpMap"
 
                 # Need to convert subnet mask to -PrefixLength
                 $subnetAsPrefix = $null
