@@ -183,7 +183,7 @@
                 "description": "Select the memory per Azure Local machine. If you choose more memory than will fit on your host system, the per-machine memory will be reduced automatically."
             }
         },
-        "installWindowsAdminCenter": {
+        "installWAC": {
             "type": "string",
             "defaultValue": "Yes",
             "allowedValues": [
@@ -648,7 +648,7 @@
                                 "domainName": "[parameters('domainName')]",
                                 "telemetryLevel": "[parameters('telemetryLevel')]",
                                 "updateImages": "[parameters('updateImages')]",
-                                "installWindowsAdminCenter": "[parameters('installWindowsAdminCenter')]"
+                                "installWAC": "[parameters('installWAC')]"
                             }
                         },
                         "protectedSettings": {

@@ -32,7 +32,7 @@ configuration AzLWorkshop
     Import-DscResource -ModuleName 'hyperVDsc' -ModuleVersion 4.0.0
     Import-DscResource -ModuleName 'StorageDSC' -ModuleVersion 6.0.1
     Import-DscResource -ModuleName 'NetworkingDSC' -ModuleVersion 9.0.0
-    Import-DscResource -ModuleName 'MSCatalogLTS' -ModuleVersion 1.0.5
+    Import-DscResource -ModuleName 'MSCatalogLTS' -ModuleVersion 1.0.6
     Import-DscResource -ModuleName 'Hyper-ConvertImage' -ModuleVersion 10.2
 
     Node localhost

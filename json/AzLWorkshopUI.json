@@ -496,7 +496,7 @@
                             }
                         },
                         {
-                            "name": "installWindowsAdminCenter",
+                            "name": "installWAC",
                             "type": "Microsoft.Common.DropDown",
                             "label": "Install Windows Admin Center",
                             "subLabel": "",
@@ -1252,7 +1252,7 @@
                 "alreadyHaveAWindowsServerLicense": "[steps('basics').alreadyHaveAWindowsServerLicense]",
                 "azureLocalArchitecture": "[steps('azureLocalSettings').azureLocalArchitecture]",
                 "azureLocalMachineMemory": "[steps('azureLocalSettings').azureLocalMachineMemory]",
-                "installWindowsAdminCenter": "[steps('azureLocalSettings').installWindowsAdminCenter]",
+                "installWAC": "[steps('azureLocalSettings').installWAC]",
                 "updateImages": "[steps('azureLocalSettings').updateImages]",
                 "telemetryLevel": "[steps('azureLocalSettings').telemetryLevel]",
                 "domainName": "[steps('azureLocalSettings').domainName]",
