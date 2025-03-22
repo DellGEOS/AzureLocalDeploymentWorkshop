@@ -43,21 +43,23 @@ configuration AzLWorkshop
             ConfigurationMode  = 'ApplyOnly'
         }
 
+        # Set the external endpoints for downloads
         [String]$mslabUri = "https://aka.ms/mslab/download"
         [String]$wsIsoUri = "https://go.microsoft.com/fwlink/p/?LinkID=2195280"
         [String]$azureLocalIsoUri = "https://aka.ms/HCIReleaseImage"
         [String]$labConfigUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/labconfig/AzureLocalLabConfig.ps1"
         [String]$rdpConfigUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/rdp/rdpbase.rdp"
-
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
         if (!$customRdpPort) {
             $customRdpPort = 3389
         }
 
+        # Set the VM prefix based on the current date
+        # This is used to create unique VM names for the Azure Local machines
         $vmPrefix = (Get-Date -UFormat %d%b%y).ToUpper()
 
-        # Calculate the number of Azure Local machines required
+        # Calculate the number of Azure Local machines based on the architecture
         $azureLocalMachines = if ($azureLocalArchitecture -eq "Single Machine") { 1 } else { [INT]$azureLocalArchitecture.Substring(0, 1) }
 
         # Determine vSwitch name and allowed VLANs based on azureLocalArchitecture
@@ -79,7 +81,7 @@ configuration AzLWorkshop
             }
         }
 
-        # Define parameters
+        # Set the workshop path based on the current machine - If this is running in Azure, set the workshop path to V:\AzLWorkshop
         if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
             # If this in Azure, lock things in specifically
             $targetDrive = "V"
@@ -89,6 +91,7 @@ configuration AzLWorkshop
             $workshopPath = "$workshopPath" + "\AzLWorkshop"
         }
 
+        # Set the paths for the workshop
         $mslabLocalPath = "$workshopPath\mslab.zip"
         $labConfigPath = "$workshopPath\LabConfig.ps1"
         $parentDiskPath = "$workshopPath\ParentDisks"
@@ -99,14 +102,17 @@ configuration AzLWorkshop
         $flagsPath = "$workshopPath\Flags"
         $azLocalVhdPath = "$parentDiskPath\AzL_G2.vhdx"
 
+        # Set the domain NetBIOS name and core credentials
         $domainNetBios = $domainName.Split('.')[0]
         $domainAdminName = $Admincreds.UserName
         $msLabUsername = "$domainNetBios\$($Admincreds.UserName)"
         $msLabPassword = $Admincreds.GetNetworkCredential().Password
 
+        # Set the ISO paths based on if this is an Azure VM. If not, use the supplied paths
+        # If this is on-prem, user should have supplied a folder/path they wish to install into
+        # Users can also supply a pre-downloaded ISO for both WS and Azure Local
+
         if (!((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77")) {
-            # If this is on-prem, user should have supplied a folder/path they wish to install into
-            # Users can also supply a pre-downloaded ISO for both WS and Azure Local
             if (!$AzureLocalIsoPath) {
                 $azLocalIsoPath = "$isoPath\AzureLocal"
                 $azLocalISOLocalPath = "$azLocalIsoPath\AzureLocal.iso"
@@ -131,9 +137,8 @@ configuration AzLWorkshop
             $azLocalISOLocalPath = "$azLocalIsoPath\AzureLocal.iso"
         }
 
+        # If this is in Azure, configure Storage Spaces Direct and then create the required folders
         if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
-
-            #### CREATE STORAGE SPACES V: & VM FOLDER ####
 
             Script StoragePool {
                 SetScript  = {
@@ -249,66 +254,59 @@ configuration AzLWorkshop
             DependsOn       = "[File]Updates"
         }
 
+        # Download the latest MSlab files - this is a zip file that contains the MSLab scripts and files
         Script "Download MSLab" {
             GetScript  = {
                 $result = Test-Path -Path "$Using:mslabLocalPath"
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 $ProgressPreference = 'SilentlyContinue'
                 Invoke-WebRequest -Uri "$Using:mslabUri" -OutFile "$Using:mslabLocalPath" -UseBasicParsing
             }
-
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[File]WorkshopFolder"
         }
 
+        # Extract the MSLab files to the workshop folder
         Script "Extract MSLab" {
             GetScript  = {
                 $result = !(Test-Path -Path "$Using:mslabLocalPath")
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 Expand-Archive -Path "$Using:mslabLocalPath" -DestinationPath "$Using:workshopPath" -Force
-                #$extractedFlag = "$Using:flagsPath\MSLabExtracted.txt"
-                #New-Item $extractedFlag -ItemType file -Force
             }
-
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[Script]Download MSLab"
         }
 
+        # Download the latest customized LabConfig file - this is a script that contains the configuration for the MSLab deployment
         Script "Replace LabConfig" {
             GetScript  = {
                 $result = ((Get-Item $Using:labConfigPath).LastWriteTime -ge (Get-Date).ToUniversalTime() -and (Get-Item $Using:labConfigPath).Length -gt 10240)
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 $ProgressPreference = 'SilentlyContinue'
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
                 $client = New-Object System.Net.WebClient
                 $client.DownloadFile("$Using:labConfigUri", "$Using:labConfigPath")
             }
-
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[Script]Extract MSLab"
         }
 
+        # Replace the LabConfig file with the customized version using variables specific to this deployment
         Script "Edit LabConfig" {
             GetScript  = {
                 $result = !(Test-Path -Path "$Using:labConfigPath")
@@ -330,6 +328,7 @@ configuration AzLWorkshop
                 $labConfigFile = $labConfigFile.Replace("<<vSwitchName>>", $Using:vSwitchName)
                 $labConfigFile = $labConfigFile.Replace("<<allowedVlans>>", $Using:allowedVlans)
 
+                # customize the lab config file based on WAC being installed or not
                 if ($Using:installWAC -eq "Yes") {
                     $labConfigFile = $labConfigFile.Replace("<<installWAC>>", '$LabConfig.VMs += @{ VMName = ''WAC'' ; ParentVHD = ''Win2022Core_G2.vhdx'' ; MGMTNICs = 1 }')
                 }
@@ -338,54 +337,51 @@ configuration AzLWorkshop
                 }
 
                 Out-File -FilePath "$Using:labConfigPath" -InputObject $labConfigFile -Force
-                #$LabConfigUpdatedFlag = "$Using:flagsPath\LabConfigUpdated.txt"
-                #New-Item $LabConfigUpdatedFlag -ItemType file -Force
             }
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[Script]Replace LabConfig"
         }
 
+        # If the user has not provided a Windows Server ISO, download one
         Script "Download Windows Server ISO" {
             GetScript  = {
                 $result = Test-Path -Path $Using:wsISOLocalPath
                 return @{ 'Result' = $result }
             }
-    
             SetScript  = {
                 $ProgressPreference = 'SilentlyContinue'
                 Start-BitsTransfer -Source $Using:wsIsoUri -Destination $Using:wsISOLocalPath   
             }
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[File]WSISOpath"
         }
 
+        # If the user has not provides an Azure Local ISO, download the latest one.
         Script "Download Azure Local ISO" {
             GetScript  = {
                 $result = Test-Path -Path $Using:azLocalISOLocalPath
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 $ProgressPreference = 'SilentlyContinue'
                 Start-BitsTransfer -Source $Using:azureLocalIsoUri -Destination $Using:azLocalISOLocalPath            
             }
-
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[File]azLocalIsoPath"
         }
 
+        # If the user has chosen to update their images, download the latest Cumulative updates
         Script "Download CU" {
             GetScript  = {
                 if ($Using:updateImages -eq "Yes") {
@@ -396,7 +392,6 @@ configuration AzLWorkshop
                 }
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 if ($Using:updateImages -eq "Yes") {
                     $ProgressPreference = 'SilentlyContinue'
@@ -421,15 +416,14 @@ configuration AzLWorkshop
                     New-Item $NoCuFlag -ItemType file -Force
                 }
             }
-
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+            TestScript = {    
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[File]CU"
         }
 
+        # If the user has chosen to update their images, download the latest Servicing Stack Update
         Script "Download SSU" {
             GetScript  = {
                 if ($Using:updateImages -eq "Yes") {
@@ -440,7 +434,6 @@ configuration AzLWorkshop
                 }
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 $ProgressPreference = 'SilentlyContinue'
                 if ($Using:updateImages -eq "Yes") {
@@ -465,37 +458,33 @@ configuration AzLWorkshop
                     New-Item $NoSsuFlag -ItemType file -Force
                 }
             }
-
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[File]SSU"
         }
 
-        #### SET WINDOWS DEFENDER EXCLUSION FOR VM STORAGE ####
-
-        if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
+        # If this is a Windows Server OS, update the Windows Defender exclusions to include the workshop path
+        if ((Get-WmiObject -Class Win32_OperatingSystem).ProductType -eq "3") {
 
             Script defenderExclusions {
+                GetScript  = {
+                    $exclusionPath = $Using:workshopPath
+                    @{Ensure = if ((Get-MpPreference).ExclusionPath -contains "$exclusionPath") { 'Present' } Else { 'Absent' } }
+                }
                 SetScript  = {
-                    $exclusionPath = "$Using:targetDrive" + ":\"
+                    $exclusionPath = $Using:workshopPath
                     Add-MpPreference -ExclusionPath "$exclusionPath"               
                 }
                 TestScript = {
-                    $exclusionPath = "$Using:targetDrive" + ":\"
-                (Get-MpPreference).ExclusionPath -contains "$exclusionPath"
-                }
-                GetScript  = {
-                    $exclusionPath = "$Using:targetDrive" + ":\"
-                    @{Ensure = if ((Get-MpPreference).ExclusionPath -contains "$exclusionPath") { 'Present' } Else { 'Absent' } }
+                    $exclusionPath = $Using:workshopPath
+            (Get-MpPreference).ExclusionPath -contains "$exclusionPath"
                 }
                 DependsOn  = "[File]WorkshopFolder"
             }
 
-            #### REGISTRY & FIREWALL TWEAKS FOR AZURE VM ####
-
+            # Updated various registry keys and firewall to optimize experience
             Registry "Disable Internet Explorer ESC for Admin" {
                 Key       = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}"
                 Ensure    = 'Present'
@@ -549,8 +538,7 @@ configuration AzLWorkshop
             }
         }
 
-        #### ENABLE & CONFIG HYPER-V ####
-
+        # Enable and configure Hyper-V
         $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
         if ($osInfo.ProductType -eq 3) {
             WindowsFeature "Hyper-V" {
@@ -578,22 +566,19 @@ configuration AzLWorkshop
         }
 
         #### Start Azure Local VHDx Creation ####
-
         Script "CreateAzLocalDisk" {
             GetScript  = {
                 $result = (Test-Path -Path $Using:azLocalVhdPath) -and (Test-Path -Path "$Using:flagsPath\AzLVhdComplete.txt")
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
-                # Create Azure Local Host Image from ISO
-                
                 $scratchPath = "$Using:workshopPath\Scratch"
                 New-Item -ItemType Directory -Path "$scratchPath" -Force | Out-Null
                 
                 # Determine if any SSUs are available
                 $ssu = Test-Path -Path "$Using:ssuPath\*" -Include "*.msu"
 
+                # Call Convert-WindowsImage to handle creation of VHDX file
                 if ($ssu) {
                     Convert-WindowsImage -SourcePath $Using:azLocalISOLocalPath -SizeBytes 127GB -VHDPath $Using:azLocalVhdPath `
                         -VHDFormat VHDX -VHDType Dynamic -VHDPartitionStyle GPT -Package $Using:ssuPath -TempDirectory $Using:scratchPath -Verbose
@@ -611,64 +596,58 @@ configuration AzLWorkshop
                 $AzLVhdFlag = "$Using:flagsPath\AzLVhdComplete.txt"
                 New-Item $AzLVhdFlag -ItemType file -Force
             }
-
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[file]ParentDisks", "[Script]Download Azure Local ISO", "[Script]Download SSU", "[Script]Download CU"
         }
 
-        # Start MSLab Deployment
+        # Start MSLab Deployment by calling Prereq script to automate setup
+        # https://github.com/microsoft/MSLab/blob/master/Scripts/1_Prereq.ps1
         Script "MSLab Prereqs" {
             GetScript  = {
                 $result = (Test-Path -Path "$Using:flagsPath\PreReqComplete.txt")
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 Set-Location "$Using:workshopPath"
                 .\1_Prereq.ps1
                 $preReqFlag = "$Using:flagsPath\PreReqComplete.txt"
                 New-Item $preReqFlag -ItemType file -Force
             }
-
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[Script]Edit LabConfig", "[Script]CreateAzLocalDisk"
         }
 
+        # Create the Windows Server VHDx files - GUI and Core
         Script "MSLab CreateParentDisks" {
             GetScript  = {
                 $result = (Test-Path -Path "$Using:flagsPath\CreateDisksComplete.txt")
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 Set-Location "$Using:workshopPath"
                 .\2_CreateParentDisks.ps1
                 $parentDiskFlag = "$Using:flagsPath\CreateDisksComplete.txt"
                 New-Item $parentDiskFlag -ItemType file -Force
             }
-
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+            TestScript = {  
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[Script]MSLab Prereqs"
         }
 
+        # Trigger the MSLab deployment by calling Deploy.ps1, which pulls in the customized LabConfig.ps1
         Script "MSLab DeployEnvironment" {
             GetScript  = {
                 $result = (Test-Path -Path "$Using:flagsPath\DeployComplete.txt")
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 Set-Location "$Using:workshopPath"
                 .\Deploy.ps1
@@ -677,18 +656,22 @@ configuration AzLWorkshop
                 Write-Host "Sleeping for 2 minutes to allow for AzL nested hosts to reboot as required"
                 Start-Sleep -Seconds 120
             }
-
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[Script]MSLab CreateParentDisks"
         }
 
-        # Create a switch statement to populate the $vms paremeter based on the the $azureLocalMachines number. $vms should be an array of strings containing the names of the VMs that will be created.
-        # The VM name that is used during the deployment is based on the $vmPrefix variable, which is set in the labconfig file and should only include the AzL VMs and not include the DC or WAC VMs.
-        # The range of $azureLocalMachines is 1-4
+        <#
+        Create a switch statement to populate the $vms parameter based on the the $azureLocalMachines number
+        $vms should be an array of strings containing the names of the VMs that will be created.
+        The VM name that is used during the deployment is based on the $vmPrefix variable.
+        This is set in the labconfig file and should only include the AzL VMs and not include the DC or WAC VMs.
+        The range of $azureLocalMachines is 1-4
+        #>
+
+        # Create a switch statement to populate the $vms parameter based on the $azureLocalMachines number
         $vms = @()
         switch ($azureLocalMachines) {
             1 { $vms = @("AzL1") }
@@ -697,10 +680,12 @@ configuration AzLWorkshop
             4 { $vms = @("AzL1", "AzL2", "AzL3", "AzL4") }
         }
 
-        # To do: Update Azl node IP address on Management1 on each node, disable DHCP on all NICs
-        # Need to get the DHCP scope, subnet mask, and gateway from the DC VM and start at .11 for the first node and go on from there
-        # Same for WAC VM but this can have .10 as it's static IP
-        # Need to create A-records for the AzL machines in the DNS server that use the static IPs
+        <# 
+        Firstly grab the DHCP scope based on what's been defined in the LabConfig.ps1
+        Then populate a hashtable with the name of the VM and the correct IP mapped to that VM
+        Then apply the correct Static IP, gateway, DNS servers etc
+        Then update the DNS records on the DC
+        #>
 
         Script "Set Static IPs" {
             GetScript  = {
@@ -790,7 +775,8 @@ configuration AzLWorkshop
                     $vmName = "$Using:vmPrefix-$vm"
                     $vmIpAddress = $AzLIpMap[$vm]
 
-                    Invoke-Command -VMName $vmName -Credential $scriptCredential -ArgumentList $vmName, $vmIpAddress, $gateway, $subnetAsPrefix, $dnsServers -ScriptBlock {
+                    Invoke-Command -VMName $vmName -Credential $scriptCredential `
+                        -ArgumentList $vmName, $vmIpAddress, $gateway, $subnetAsPrefix, $dnsServers -ScriptBlock {
                         param ($vmName, $vmIpAddress, $gateway, $subnetAsPrefix, $dnsServers)
                         Write-Host "Enable ping through the firewall on $vmName"
                         # Enable PING through the firewall
@@ -818,10 +804,11 @@ configuration AzLWorkshop
                     }
                 }
 
-                # Need to create A records in DNS for each of the AzL VMs
+                # Create A records in DNS for each of the AzL VMs
                 Write-Host "Creating DNS records VMs"
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ArgumentList $vmIpAddress, $AzLIpMap, $Using:domainName -ScriptBlock {
+                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential `
+                    -ArgumentList $vmIpAddress, $AzLIpMap, $Using:domainName -ScriptBlock {
                     param ($vmIpAddress, $AzLIpMap, $domainName)
                     foreach ($vm in $AzLIpMap.Keys) {
                         Write-Host "Updating DNS Record for $vm"
@@ -838,23 +825,13 @@ configuration AzLWorkshop
                 New-Item $staticIpFlag -ItemType file -Force
             }
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[Script]MSLab DeployEnvironment"
         }
 
-        if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
-            $azureUsername = $($Admincreds.UserName)
-            $desktopPath = "C:\Users\$azureUsername\Desktop"
-            $rdpConfigPath = "$workshopPath\$vmPrefix-DC.rdp"
-        }
-        else {
-            $desktopPath = [Environment]::GetFolderPath("Desktop")
-            $rdpConfigPath = "$desktopPath\$vmPrefix-DC.rdp"
-        }
-
+        # Ensure that the DC accepts RDP access
         Script "Enable RDP on DC" {
             GetScript  = {
                 $vmIpAddress = (Get-VMNetworkAdapter -Name 'Internet' -VMName "$Using:vmPrefix-DC").IpAddresses | Where-Object { $_ -notmatch ':' }
@@ -866,7 +843,6 @@ configuration AzLWorkshop
                 }
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
@@ -875,15 +851,14 @@ configuration AzLWorkshop
                     Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
                 }
             }
-
-            TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+            TestScript = {   
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[Script]MSLab DeployEnvironment"
         }
 
+        # If the user has chosen to deploy WAC, need to trigger an installation of the latest WAC build
         if ($installWAC -eq 'Yes') {
             Script "Deploy WAC" {
                 GetScript  = {
@@ -970,7 +945,6 @@ configuration AzLWorkshop
                     }
                 }
                 TestScript = {
-                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
@@ -981,6 +955,7 @@ configuration AzLWorkshop
             Write-Host "Skipping Windows Admin Center deployment as it was not selected."
         }
 
+        # Quick switch to determine the correct dependsOn for when to update the DC
         $updateDCDependsOn = switch ($installWAC) {
             'Yes' { "[Script]Deploy WAC" }
             'No' { "[Script]Enable RDP on DC" }
@@ -1001,7 +976,6 @@ configuration AzLWorkshop
                 }
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
@@ -1036,7 +1010,6 @@ configuration AzLWorkshop
                 }
             }
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
@@ -1105,6 +1078,7 @@ configuration AzLWorkshop
                 }
             }
         }
+        
         # Create vSwitch and vNICs for 3-machine switchless single-link architectures
         elseif ($azureLocalArchitecture -eq "3-Machine Switchless Single-Link") {
             # Create 1 vSwitch per VM named "Storage" plus the Number of the 2 nodes that it will connect between (e.g. Storage1-2)
@@ -1149,6 +1123,7 @@ configuration AzLWorkshop
                 }
             }
         }
+
         # Create vSwitch and vNICs for 3-machine switchless dual-link architectures
         elseif ($azureLocalArchitecture -like "3-Machine Switchless Dual-Link") {
             # Create 6 private vSwitches named "Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2", "Storage1-3", and "Storage3-1"
@@ -1213,6 +1188,7 @@ configuration AzLWorkshop
                 }
             }
         }
+        
         # Create vSwitch and vNICs for 4-machine switchless dual-link architectures
         elseif ($azureLocalArchitecture -like "4-Machine Switchless Dual-Link") {
             # Create 12 private vSwitches named "Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2", "Storage1-3", "Storage3-1", "Storage1-4", "Storage4-1", "Storage2-4", "Storage4-2", "Storage3-4", and "Storage4-3"
@@ -1358,7 +1334,6 @@ configuration AzLWorkshop
 
         # Perform the SetStorageVLANs script based on the $azureLocalArchitecture
         # Not necessary if $azureLocalArchitecture is either 'Single Machine' or '*Fully-Converged'
-
         if ($azureLocalArchitecture -notlike "Single Machine" -and $azureLocalArchitecture -notlike "*Fully-Converged") {
             Script "SetStorageVLANs" {
                 GetScript  = {
@@ -1388,7 +1363,6 @@ configuration AzLWorkshop
                     }
                 }
                 TestScript = {
-                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
@@ -1396,11 +1370,13 @@ configuration AzLWorkshop
             }
         }
 
+        # Quick switch to determine the correct dependsOn for updating the AzLNicNames
         $updateAzLNicNamesDependsOn = switch ($azureLocalArchitecture) {
             { $_ -eq "Single Machine" -or $_ -like "*Fully-Converged" } { '[Script]Update DC' }
             Default { '[Script]SetStorageVLANs' }
         }
 
+        # Update all the Nic Names in the AzL VMs to make it easier for configuring the networking during instance deployment
         Script "UpdateAzLNicNames" {
             GetScript  = {
                 $result = $true
@@ -1457,11 +1433,21 @@ configuration AzLWorkshop
                 }
             }
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = $updateAzLNicNamesDependsOn
+        }
+
+        # Create an RDP file on the desktop to easily remotely connect into the DC
+        if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
+            $azureUsername = $($Admincreds.UserName)
+            $desktopPath = "C:\Users\$azureUsername\Desktop"
+            $rdpConfigPath = "$workshopPath\$vmPrefix-DC.rdp"
+        }
+        else {
+            $desktopPath = [Environment]::GetFolderPath("Desktop")
+            $rdpConfigPath = "$desktopPath\$vmPrefix-DC.rdp"
         }
 
         # Create RDP file for the DC VM
@@ -1470,26 +1456,23 @@ configuration AzLWorkshop
                 $result = Test-Path -Path "$Using:rdpConfigPath"
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 $ProgressPreference = 'SilentlyContinue'
                 Invoke-WebRequest -Uri "$Using:rdpConfigUri" -OutFile "$Using:rdpConfigPath" -UseBasicParsing
             }
-
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[Script]UpdateAzLNicNames"
         }
 
+        # Update the RDP file with customized values for the environment
         Script "Edit RDP file" {
             GetScript  = {
                 $result = ((Get-Item $Using:rdpConfigPath).LastWriteTime -ge (Get-Date))
                 return @{ 'Result' = $result }
             }
-
             SetScript  = {
                 $vmIpAddress = (Get-VMNetworkAdapter -Name 'Internet' -VMName "$Using:vmPrefix-DC").IpAddresses | Where-Object { $_ -notmatch ':' }
                 $rdpConfigFile = Get-Content -Path "$Using:rdpConfigPath"
@@ -1497,31 +1480,27 @@ configuration AzLWorkshop
                 $rdpConfigFile = $rdpConfigFile.Replace("<<rdpUserName>>", $Using:msLabUsername)
                 Out-File -FilePath "$Using:rdpConfigPath" -InputObject $rdpConfigFile -Force
             }
-
             TestScript = {
-                # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
             DependsOn  = "[Script]Download RDP File"
         }
 
+        # If this is in Azure, create a RunOnce that will copy the RDP file to the user's desktop
         if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
-
             Script "Create RDP RunOnce" {
                 GetScript  = {
                     $result = [bool] (Get-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name '!CopyRDPFile' -ErrorAction SilentlyContinue)
                     return @{ 'Result' = $result }
                 }
-    
                 SetScript  = {
                     $command = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -command `"Copy-Item -Path `'$Using:rdpConfigPath`' -Destination `'$Using:desktopPath`' -Force`""
                     Set-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name '!CopyRDPFile' `
                         -Value $command
                 }
-
-                TestScript = {
-                    # Create and invoke a scriptblock using the $GetScript automatic variable, which contains a string representation of the GetScript.
+                TestScript = {   
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
