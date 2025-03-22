@@ -124,7 +124,7 @@ Upon clicking the **Deploy to Azure** button, enter the details, which should lo
 
 Use this one to test new UI JSON:
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#view/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FDellGEOS%2FHybridJumpstart%2Fmain%2Fjson%2FAzLWorkshop.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FDellGEOS%2FHybridJumpstart%2Fmain%2Fjson%2FAzLWorkshopUI.json "Deploy to Azure")
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#view/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FDellGEOS%2FAzureLocalDeploymentWorkshop%2Fmain%2Fjson%2FAzLWorkshop.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FDellGEOS%2FAzureLocalDeploymentWorkshop%2Fmain%2Fjson%2FAzLWorkshopUI.json "Deploy to Azure")
 
 _________________
 ### Important Note <!-- omit in toc -->
