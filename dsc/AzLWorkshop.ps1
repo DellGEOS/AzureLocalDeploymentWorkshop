@@ -708,26 +708,21 @@ configuration AzLWorkshop
                 $result = $false
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 if ($Using:installWAC -eq 'Yes') {
-                    $vms = $using:vms + 'WAC'
+                    $updatedVmArray = $using:vms + 'WAC'
                 }
                 else {
-                    $vms = $using:vms
+                    $updatedVmArray = $using:vms
                 }
                 $result = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
-                    # Create $pingTest array to store the results of the Test-NetConnection
-                    $pingTest = @()
-                    foreach ($vm in $Using:vms) {
-                        $vmName = $vm
-                        Write-Host "Ping test: $vmName"
-                        $pingTest += (Test-NetConnection -ComputerName $vmName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue).PingSucceeded
+                    $updatedVmArray = $using:updatedVmArray
+                    $result = $true
+                    foreach ($v in $updatedVmArray) {
+                        Write-Host "Pinging VM: $v"
+                        if ((Test-NetConnection -ComputerName $v -ErrorAction SilentlyContinue -WarningAction SilentlyContinue).PingSucceeded -eq $false) {
+                            $result = $false
+                        }
                     }
-                    # If any ping is unsuccessful, return $false
-                    if ($pingTest -contains $false) {
-                        return $false
-                    }
-                    else {
-                        return $true
-                    }
+                    return $result
                 }
                 return @{ 'Result' = $result }
             }
