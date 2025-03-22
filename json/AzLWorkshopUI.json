@@ -547,7 +547,7 @@
                             "type": "Microsoft.Common.TextBlock",
                             "visible": true,
                             "options": {
-                                "text": "Choose whether you would like to enable Azure Local telemetry. This will help us improve the service by collecting data on how you use Azure Local.",
+                                "text": "Choose to opt-in to telemetry collection to better understand impact of the Azure Local Workshop/MSLab scripts i.e. number of VMs deployed, where MSLab is being used etc. Data sent from scripts are hosted in Azure Application Insights service and it is absolutely transparent what information is being collected, since all code is visible in PowerShell Scripts on Github repository.",
                                 "link": {
                                     "label": "",
                                     "uri": ""
@@ -559,18 +559,22 @@
                             "type": "Microsoft.Common.DropDown",
                             "label": "Enable Telemetry",
                             "subLabel": "",
-                            "defaultValue": "Yes",
-                            "toolTip": "Select Yes to enable Azure Local telemetry.",
+                            "defaultValue": "None",
+                            "toolTip": "Choose your preferred level of telemetry for the Azure Local workshop deployment.",
                             "constraints": {
                                 "required": true,
                                 "allowedValues": [
                                     {
-                                        "label": "Yes",
-                                        "value": "Yes"
+                                        "label": "Full",
+                                        "value": "Full"
                                     },
                                     {
-                                        "label": "No",
-                                        "value": "No"
+                                        "label": "Basic",
+                                        "value": "Basic"
+                                    },
+                                    {
+                                        "label": "None",
+                                        "value": "None"
                                     }
                                 ],
                                 "validations": []

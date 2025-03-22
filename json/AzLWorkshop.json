@@ -207,14 +207,14 @@
         },
         "telemetryLevel": {
             "type": "string",
-            "defaultValue": "Full",
+            "defaultValue": "None",
             "allowedValues": [
                 "None",
                 "Basic",
                 "Full"
             ],
             "metadata": {
-                "description": "Choose to opt-in to telemetry collection to better understand impact of the Hybrid Jumpstart/MSLab scripts i.e. number of VMs deployed, where MSLab is being used etc. Data sent from scripts are hosted in Azure Application Insights service and it is absolutely transparent what information is being collected, since all code is visible in PowerShell Scripts on Github repository. More info here: https://github.com/microsoft/MSLab/blob/master/Docs/mslab-telemetry.md"
+                "description": "Choose to opt-in to telemetry collection to better understand impact of the Azure Local Workshop/MSLab scripts i.e. number of VMs deployed, where MSLab is being used etc. Data sent from scripts are hosted in Azure Application Insights service and it is absolutely transparent what information is being collected, since all code is visible in PowerShell Scripts on Github repository. More info here: https://github.com/microsoft/MSLab/blob/master/Docs/mslab-telemetry.md"
             }
         },
         "dataDiskType": {
