@@ -689,7 +689,7 @@ configuration AzLWorkshop
 
         Script "Set Static IPs" {
             GetScript  = {
-                $result = (Test-Path -Path "$Using:flagsPath\StaticIPsSet.txt")
+                $result = (Test-Path -Path "$Using:flagsPath\StaticIpComplete.txt" -ErrorAction SilentlyContinue)
                 return @{ 'Result' = $result }
             }
             SetScript  = {
@@ -743,9 +743,6 @@ configuration AzLWorkshop
                     $wacIP = [ipaddress]("$shortDhcpScope.10")
                     $AzLIpMap.Add('WAC', $wacIP.IPAddressToString)
                 }
-
-                Write-Host "VM to IP Mappings:"
-                Write-Host "$AzLIpMap"
 
                 # Need to convert subnet mask to -PrefixLength
                 $subnetAsPrefix = $null
