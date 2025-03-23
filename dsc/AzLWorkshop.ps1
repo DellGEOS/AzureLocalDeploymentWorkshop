@@ -809,13 +809,13 @@ configuration AzLWorkshop
 
                     Write-Host "Creating DNS record for $vmName"
                     Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential `
-                        -ArgumentList $vmIpAddress, $Using:domainName -ScriptBlock {
-                        param ($vmIpAddress, $domainName)
+                        -ArgumentList $vmName, $vmIpAddress, $Using:domainName -ScriptBlock {
+                        param ($vmName, $vmIpAddress, $domainName)
                         $dnsCheck = Get-DnsServerResourceRecord -Name $vmName -ZoneName $domainName -ErrorAction SilentlyContinue
                         if ($dnsCheck) {
                             $dnsCheck | Remove-DnsServerResourceRecord -ZoneName $domainName -Force
                         }
-                        Add-DnsServerResourceRecordA -Name $vm -ZoneName $domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
+                        Add-DnsServerResourceRecordA -Name $vmName -ZoneName $domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
                     }
                 }
             }
