@@ -653,8 +653,8 @@ configuration AzLWorkshop
                 .\Deploy.ps1
                 $deployFlag = "$Using:flagsPath\DeployComplete.txt"
                 New-Item $deployFlag -ItemType file -Force
-                Write-Host "Sleeping for 2 minutes to allow for AzL nested hosts to reboot as required"
-                Start-Sleep -Seconds 120
+                Write-Host "Sleeping for 4 minutes to allow for AzL nested hosts to reboot as required"
+                Start-Sleep -Seconds 240
             }
             TestScript = {
                 $state = [scriptblock]::Create($GetScript).Invoke()
@@ -774,8 +774,8 @@ configuration AzLWorkshop
                     $vmIpAddress = $AzLIpMap[$vm]
 
                     Invoke-Command -VMName $vmName -Credential $scriptCredential `
-                        -ArgumentList $vmName, $vmIpAddress, $gateway, $subnetAsPrefix, $dnsServers -ScriptBlock {
-                        param ($vmName, $vmIpAddress, $gateway, $subnetAsPrefix, $dnsServers)
+                        -ArgumentList $vmName, $vmIpAddress, $gateway, $subnetAsPrefix -ScriptBlock {
+                        param ($vmName, $vmIpAddress, $gateway, $subnetAsPrefix)
                         Write-Host "Enable ping through the firewall on $vmName"
                         # Enable PING through the firewall
                         Enable-NetFirewallRule -displayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
@@ -797,8 +797,13 @@ configuration AzLWorkshop
                         }
                         Write-Host "$vmName - Setting Management1 static IP address to $vmIpAddress"
                         $adapter | New-NetIPAddress -IPAddress "$vmIpAddress" -DefaultGateway "$gateway" -PrefixLength $subnetAsPrefix -ErrorAction SilentlyContinue
+                    }
+                    Invoke-Command -VMName $vmName -Credential $scriptCredential `
+                        -ArgumentList $vmName, $vmIpAddress, $gateway, $subnetAsPrefix, $dnsServers -ScriptBlock {
+                        param ($vmName, $dnsServers)
+                        $adapter = Get-NetAdapter -Name 'Management1' -ErrorAction SilentlyContinue
                         Write-host "$vmName - Setting Management1 DNS Servers to $dnsServers"
-                        $adapter | Set-DnsClientServerAddress -ServerAddresses $dnsServers
+                        $adapter | Set-DnsClientServerAddress -ServerAddresses $dnsServers -Confirm:$false
                     }
                 }
 
