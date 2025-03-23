@@ -653,8 +653,8 @@ configuration AzLWorkshop
                 .\Deploy.ps1
                 $deployFlag = "$Using:flagsPath\DeployComplete.txt"
                 New-Item $deployFlag -ItemType file -Force
-                Write-Host "Sleeping for 4 minutes to allow for AzL nested hosts to reboot as required"
-                Start-Sleep -Seconds 240
+                Write-Host "Sleeping for 8 minutes to allow for AzL nested hosts to reboot as required"
+                Start-Sleep -Seconds 480
             }
             TestScript = {
                 $state = [scriptblock]::Create($GetScript).Invoke()
@@ -799,7 +799,7 @@ configuration AzLWorkshop
                         $adapter | New-NetIPAddress -IPAddress "$vmIpAddress" -DefaultGateway "$gateway" -PrefixLength $subnetAsPrefix -ErrorAction SilentlyContinue
                     }
                     Invoke-Command -VMName $vmName -Credential $nonDomainCredential `
-                        -ArgumentList $vmName, $vmIpAddress, $gateway, $subnetAsPrefix, $dnsServers -ScriptBlock {
+                        -ArgumentList $vmName, $dnsServers -ScriptBlock {
                         param ($vmName, $dnsServers)
                         $adapter = Get-NetAdapter -Name 'Management1' -ErrorAction SilentlyContinue
                         Write-host "$vmName - Setting Management1 DNS Servers to $dnsServers"
