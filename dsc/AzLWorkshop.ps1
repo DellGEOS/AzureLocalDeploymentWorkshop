@@ -689,7 +689,8 @@ configuration AzLWorkshop
 
         Script "Set Static IPs" {
             GetScript  = {
-                $result = (Test-Path -Path "$Using:flagsPath\StaticIpComplete.txt" -ErrorAction SilentlyContinue)
+                #$result = (Test-Path -Path "$Using:flagsPath\StaticIpComplete.txt" -ErrorAction SilentlyContinue)
+                $result = $false
                 return @{ 'Result' = $result }
             }
             SetScript  = {
@@ -795,8 +796,8 @@ configuration AzLWorkshop
                             $adapter | Remove-NetRoute -NextHop "$gateway" -Confirm:$false
                         }
                         Write-Host "$vmName - Setting Management1 static IP address to $vmIpAddress"
-                        $adapter | New-NetIPAddress -IPAddress "$vmIpAddress" -DefaultGateway "$gateway" -PrefixLength $subnetAsPrefix -ErrorAction Stop
-                        Write-host "Setting Management1 DNS Servers to $dnsServers"
+                        $adapter | New-NetIPAddress -IPAddress "$vmIpAddress" -DefaultGateway "$gateway" -PrefixLength $subnetAsPrefix -ErrorAction SilentlyContinue
+                        Write-host "$vmName - Setting Management1 DNS Servers to $dnsServers"
                         $adapter | Set-DnsClientServerAddress -ServerAddresses $dnsServers
                     }
                 }
@@ -818,8 +819,8 @@ configuration AzLWorkshop
                     }
                 }
                 # Create a flag to indicate the static IPs have been set
-                $staticIpFlag = "$Using:flagsPath\StaticIpComplete.txt"
-                New-Item $staticIpFlag -ItemType file -Force
+                # $staticIpFlag = "$Using:flagsPath\StaticIpComplete.txt"
+                # New-Item $staticIpFlag -ItemType file -Force
             }
             TestScript = {
                 $state = [scriptblock]::Create($GetScript).Invoke()
@@ -852,7 +853,7 @@ configuration AzLWorkshop
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
-            DependsOn  = "[Script]MSLab DeployEnvironment"
+            DependsOn  = "[Script]Set Static IPs"
         }
 
         # If the user has chosen to deploy WAC, need to trigger an installation of the latest WAC build
