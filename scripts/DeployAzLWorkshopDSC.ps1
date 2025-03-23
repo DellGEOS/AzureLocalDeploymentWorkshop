@@ -513,11 +513,14 @@ finally {
     Write-Host "Creating AzureLocalWorkshop.ps1 on your desktop..."
     $ps1Content | Out-File -FilePath $ps1Path -Force
 
-    # Create a runonce registry key to run a script at next boot
-    # When a user logs in, the script window should be visible on the screen
-    $command = "powershell -ExecutionPolicy Bypass -File $ps1Path"
-    $run = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
-    New-ItemProperty -Path $run -Name "!AzlWorkshopDeployment" -Value $command -PropertyType String -Force
+    if ($reboot -eq $true) {
+        # Create a runonce registry key to run a script at next boot
+        # When a user logs in, the script window should be visible on the screen
+        Write-Host "Creating a runonce registry key to run the AzureLocalWorkshop.ps1 script at next boot..."
+        $command = "powershell -ExecutionPolicy Bypass -File $ps1Path"
+        $run = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
+        New-ItemProperty -Path $run -Name "!AzlWorkshopDeployment" -Value $command -PropertyType String -Force
+    }
 
     Write-Host "Checking if a reboot is required before deployment..."
     if ($reboot -eq $true) {
