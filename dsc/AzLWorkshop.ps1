@@ -771,6 +771,7 @@ configuration AzLWorkshop
 
                 foreach ($vm in $AzLIpMap.Keys) {
                     $vmName = "$Using:vmPrefix-$vm"
+                    $dnsName = $vm
                     $vmIpAddress = $AzLIpMap[$vm]
 
                     Invoke-Command -VMName $vmName -Credential $nonDomainCredential `
@@ -809,13 +810,13 @@ configuration AzLWorkshop
 
                     Write-Host "Creating DNS record for $vmName"
                     Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential `
-                        -ArgumentList $vmName, $vmIpAddress, $Using:domainName -ScriptBlock {
-                        param ($vmName, $vmIpAddress, $domainName)
-                        $dnsCheck = Get-DnsServerResourceRecord -Name $vmName -ZoneName $domainName -ErrorAction SilentlyContinue
+                        -ArgumentList $dnsName, $vmIpAddress, $Using:domainName -ScriptBlock {
+                        param ($dnsName, $vmIpAddress, $domainName)
+                        $dnsCheck = Get-DnsServerResourceRecord -Name $dnsName -ZoneName $domainName -ErrorAction SilentlyContinue
                         if ($dnsCheck) {
                             $dnsCheck | Remove-DnsServerResourceRecord -ZoneName $domainName -Force
                         }
-                        Add-DnsServerResourceRecordA -Name $vmName -ZoneName $domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
+                        Add-DnsServerResourceRecordA -Name $dnsName -ZoneName $domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
                     }
                 }
             }
