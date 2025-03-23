@@ -680,22 +680,144 @@ configuration AzLWorkshop
             4 { $vms = @("AzL1", "AzL2", "AzL3", "AzL4") }
         }
 
-        Script "Update DHCP" {
+        <# 
+        Firstly grab the DHCP scope based on what's been defined in the LabConfig.ps1
+        Then populate a hashtable with the name of the VM and the correct IP mapped to that VM
+        Then apply the correct Static IP, gateway, DNS servers etc
+        Then update the DNS records on the DC
+        #>
+
+        Script "Set Static IPs" {
             GetScript  = {
+                #$result = (Test-Path -Path "$Using:flagsPath\StaticIpComplete.txt" -ErrorAction SilentlyContinue)
                 $result = $false
                 return @{ 'Result' = $result }
             }
             SetScript  = {
                 # Get the scope from DHCP by running an Invoke-Command against the DC VM
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                # Capture the returned values from Invoke-Command
+                $returnedValues = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
                     $DhcpScope = Get-DhcpServerv4Scope
                     $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
                     # Start the scope at 50 to allow for Deployments with SDN optional services
                     # As per here: https://learn.microsoft.com/en-us/azure/azure-local/plan/three-node-ip-requirements?view=azloc-24113#deployments-with-sdn-optional-services
                     $newIpStartRange = ($shortDhcpScope + ".50")
-                    Write-Host "Updating DHCP scope to start at $newIpStartRange to allow for additional optional Azure Local services"
+                    $subnetMask = $DhcpScope.SubnetMask.IPAddressToString
+                    $gateway = (Get-DhcpServerv4OptionValue -ScopeId $DhcpScope.ScopeId -OptionId 3).Value
+                    $dnsServers = (Get-DhcpServerv4OptionValue -ScopeId $DhcpScope.ScopeId -OptionId 6).Value
                     Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $DhcpScope.EndRange
+                    return $shortDhcpScope, $subnetMask, $gateway, $dnsServers
+                }
+
+                # Assign the returned values to individual variables
+                $shortDhcpScope = $returnedValues[0]
+                $subnetMask = $returnedValues[1]
+                $gateway = $returnedValues[2]
+                $dnsServers = $returnedValues[3]
+
+                $vms = $Using:vms
+
+                # Starting at .11 for the first node, define the IP range for the AzL nodes based on the $azureLocalMachines variable
+                $AzLIpStart = ([ipaddress]("$shortDhcpScope.11"))
+                $AzLIpRange = @()
+                for ($i = 0; $i -lt $Using:azureLocalMachines; $i++) {
+                    $ipBytes = $AzLIpStart.GetAddressBytes()
+                    $ipBytes[3] += $i
+                    $AzLIpRange += [ipaddress]::new($ipBytes)
+                }
+                
+                # Create a hashtable to store the AzL VMs and their IP addresses
+                $AzLIpMap = @{} # Initialize as a hashtable
+                # Iterate through the arrays to create the mapping
+                for ($i = 0; $i -lt $vms.Count; $i++) {
+                    $AzLIpMap[$vms[$i]] = $AzLIpRange[$i].IPAddressToString
+                }
+
+                # Sort the hashtable by $vms and ensure it remains a hashtable
+                $AzLIpMap = [ordered]@{}
+                foreach ($vm in $vms | Sort-Object) {
+                    $AzLIpMap[$vm] = $AzLIpRange[$vms.IndexOf($vm)].IPAddressToString
+                }
+                
+                if ($Using:installWAC -eq 'Yes') {
+                    $wacIP = [ipaddress]("$shortDhcpScope.10")
+                    $AzLIpMap.Add('WAC', $wacIP.IPAddressToString)
+                }
+
+                # Need to convert subnet mask to -PrefixLength
+                $subnetAsPrefix = $null
+                if ($subnetMask -as [int]) {
+                    [ipaddress]$out = 0
+                    $out.Address = ([UInt32]::MaxValue) -shl (32 - $subnetMask) -shr (32 - $subnetMask)
+                    $out.IPAddressToString
+                }
+                elseif ($subnetMask = $subnetMask -as [ipaddress]) {
+                    $subnetMask.IPAddressToString.Split('.') | ForEach-Object {
+                        $currentValue = $_
+                        while ($currentValue -ne 0) {
+                            $subnetAsPrefix++
+                            $currentValue = ($currentValue -shl 1) -band [byte]::MaxValue
+                        }
+                    }
+                    #$subnetAsPrefix -as [string]
+                }
+
+                # Need to cycle through the AzL VMs and set their static IPs using Invoke-Command against each VM
+                # The VM NIC will always be the Management1 NIC. The Management2 NIC should have DHCP disabled
+                $nonDomainCredential = New-Object System.Management.Automation.PSCredential (".\Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                Write-Host "Setting Static IPs for AzL VMs"
+
+                foreach ($vm in $AzLIpMap.Keys) {
+                    $vmName = "$Using:vmPrefix-$vm"
+                    $dnsName = $vm
+                    $vmIpAddress = $AzLIpMap[$vm]
+
+                    Invoke-Command -VMName $vmName -Credential $nonDomainCredential `
+                        -ArgumentList $vmName, $vmIpAddress, $gateway, $subnetAsPrefix -ScriptBlock {
+                        param ($vmName, $vmIpAddress, $gateway, $subnetAsPrefix)
+                        Write-Host "Enable ping through the firewall on $vmName"
+                        # Enable PING through the firewall
+                        Enable-NetFirewallRule -displayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
+                        Enable-NetFirewallRule -displayName "File and Printer Sharing (Echo Request - ICMPv6-In)"
+                        # Disable DHCP on all NICs
+                        Get-NetAdapter | Set-NetIPInterface -Dhcp Disabled -Confirm:$false
+                        foreach ($N in (Get-NetAdapterAdvancedProperty -DisplayName "Hyper-V Network Adapter Name" | Where-Object DisplayValue -NotLike "")) {
+                            Write-Host "$vmName - Renaming NIC: $($N.Name) to $($n.DisplayValue)"
+                            $N | Rename-NetAdapter -NewName $n.DisplayValue
+                        }
+                        $adapter = Get-NetAdapter -Name 'Management1' -ErrorAction SilentlyContinue
+                        # Check if IP address is already set
+                        if ($adapter | Get-NetIPAddress -IPAddress "$vmIpAddress" -ErrorAction SilentlyContinue) {
+                            $adapter | Remove-NetIPAddress -Confirm:$false
+                        }
+                        # Check if Default Gateway is already set - using Get-NetRoute
+                        if ($adapter | Get-NetRoute -NextHop "$gateway" -ErrorAction SilentlyContinue) {
+                            $adapter | Remove-NetRoute -NextHop "$gateway" -Confirm:$false
+                        }
+                        Write-Host "$vmName - Setting Management1 static IP address to $vmIpAddress"
+                        $adapter | New-NetIPAddress -IPAddress "$vmIpAddress" -DefaultGateway "$gateway" -PrefixLength $subnetAsPrefix -ErrorAction SilentlyContinue
+                    }
+                    Invoke-Command -VMName $vmName -Credential $nonDomainCredential `
+                        -ArgumentList $vmName, $dnsServers -ScriptBlock {
+                        param ($vmName, $dnsServers)
+                        $adapter = Get-NetAdapter -Name 'Management1' -ErrorAction SilentlyContinue
+                        Write-host "$vmName - Setting Management1 DNS Servers to $dnsServers"
+                        $adapter | Set-DnsClientServerAddress -ServerAddresses $dnsServers -Confirm:$false -Verbose
+                        Write-Host "DNS Servers set to $dnsServers"
+                    }
+
+                    Write-Host "Creating DNS record for $vmName"
+                    Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential `
+                        -ArgumentList $dnsName, $vmIpAddress, $Using:domainName -ScriptBlock {
+                        param ($dnsName, $vmIpAddress, $domainName)
+                        $dnsCheck = Get-DnsServerResourceRecord -Name $dnsName -ZoneName $domainName -ErrorAction SilentlyContinue
+                        if ($dnsCheck) {
+                            $dnsCheck | Remove-DnsServerResourceRecord -ZoneName $domainName -Force
+                        }
+                        Add-DnsServerResourceRecordA -Name $dnsName -ZoneName $domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
+                    }
                 }
             }
             TestScript = {
@@ -729,7 +851,7 @@ configuration AzLWorkshop
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
-            DependsOn  = "[Script]Update DHCP"
+            DependsOn  = "[Script]Set Static IPs"
         }
 
         # If the user has chosen to deploy WAC, need to trigger an installation of the latest WAC build
@@ -822,7 +944,7 @@ configuration AzLWorkshop
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
-                DependsOn  = "[Script]Update DHCP"
+                DependsOn  = "[Script]Set Static IPs"
             }
         }
         else { 
