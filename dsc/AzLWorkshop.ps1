@@ -653,8 +653,8 @@ configuration AzLWorkshop
                 .\Deploy.ps1
                 $deployFlag = "$Using:flagsPath\DeployComplete.txt"
                 New-Item $deployFlag -ItemType file -Force
-                Write-Host "Sleeping for 8 minutes to allow for AzL nested hosts to reboot as required"
-                Start-Sleep -Seconds 480
+                Write-Host "Sleeping for 2 minutes to allow for AzL nested hosts to reboot as required"
+                Start-Sleep -Seconds 120
             }
             TestScript = {
                 $state = [scriptblock]::Create($GetScript).Invoke()
@@ -696,6 +696,9 @@ configuration AzLWorkshop
                     $newIpStartRange = ($shortDhcpScope + ".50")
                     Write-Host "Updating DHCP scope to start at $newIpStartRange to allow for additional optional Azure Local services"
                     Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $DhcpScope.EndRange
+                    Get-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId | Where-Object IPAddress -like "$shortDhcpScope*" | ForEach-Object {
+                        Remove-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId -IPAddress $_.IPAddress
+                    }
                 }
             }
             TestScript = {
