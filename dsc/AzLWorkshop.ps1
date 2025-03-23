@@ -803,11 +803,12 @@ configuration AzLWorkshop
                         param ($vmName, $dnsServers)
                         $adapter = Get-NetAdapter -Name 'Management1' -ErrorAction SilentlyContinue
                         Write-host "$vmName - Setting Management1 DNS Servers to $dnsServers"
-                        $adapter | Set-DnsClientServerAddress -ServerAddresses $dnsServers -Confirm:$false
+                        $adapter | Set-DnsClientServerAddress -ServerAddresses $dnsServers -Confirm:$false -Verbose
+                        Write-Host "DNS Servers set to $dnsServers"
                     }
                 }
 
-                # Create A records in DNS for each of the AzL VMs
+                <# Create A records in DNS for each of the AzL VMs
                 Write-Host "Creating DNS records VMs"
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential `
@@ -825,7 +826,7 @@ configuration AzLWorkshop
                 }
                 # Create a flag to indicate the static IPs have been set
                 # $staticIpFlag = "$Using:flagsPath\StaticIpComplete.txt"
-                # New-Item $staticIpFlag -ItemType file -Force
+                # New-Item $staticIpFlag -ItemType file -Force #>
             }
             TestScript = {
                 $state = [scriptblock]::Create($GetScript).Invoke()
