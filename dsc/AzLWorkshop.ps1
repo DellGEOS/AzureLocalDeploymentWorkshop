@@ -765,15 +765,15 @@ configuration AzLWorkshop
 
                 # Need to cycle through the AzL VMs and set their static IPs using Invoke-Command against each VM
                 # The VM NIC will always be the Management1 NIC. The Management2 NIC should have DHCP disabled
-                $scriptCredential = New-Object System.Management.Automation.PSCredential (".\Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                
+                $nonDomainCredential = New-Object System.Management.Automation.PSCredential (".\Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 Write-Host "Setting Static IPs for AzL VMs"
 
                 foreach ($vm in $AzLIpMap.Keys) {
                     $vmName = "$Using:vmPrefix-$vm"
                     $vmIpAddress = $AzLIpMap[$vm]
 
-                    Invoke-Command -VMName $vmName -Credential $scriptCredential `
+                    Invoke-Command -VMName $vmName -Credential $nonDomainCredential `
                         -ArgumentList $vmName, $vmIpAddress, $gateway, $subnetAsPrefix -ScriptBlock {
                         param ($vmName, $vmIpAddress, $gateway, $subnetAsPrefix)
                         Write-Host "Enable ping through the firewall on $vmName"
@@ -798,7 +798,7 @@ configuration AzLWorkshop
                         Write-Host "$vmName - Setting Management1 static IP address to $vmIpAddress"
                         $adapter | New-NetIPAddress -IPAddress "$vmIpAddress" -DefaultGateway "$gateway" -PrefixLength $subnetAsPrefix -ErrorAction SilentlyContinue
                     }
-                    Invoke-Command -VMName $vmName -Credential $scriptCredential `
+                    Invoke-Command -VMName $vmName -Credential $nonDomainCredential `
                         -ArgumentList $vmName, $vmIpAddress, $gateway, $subnetAsPrefix, $dnsServers -ScriptBlock {
                         param ($vmName, $dnsServers)
                         $adapter = Get-NetAdapter -Name 'Management1' -ErrorAction SilentlyContinue
@@ -806,27 +806,18 @@ configuration AzLWorkshop
                         $adapter | Set-DnsClientServerAddress -ServerAddresses $dnsServers -Confirm:$false -Verbose
                         Write-Host "DNS Servers set to $dnsServers"
                     }
-                }
 
-                <# Create A records in DNS for each of the AzL VMs
-                Write-Host "Creating DNS records VMs"
-                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential `
-                    -ArgumentList $vmIpAddress, $AzLIpMap, $Using:domainName -ScriptBlock {
-                    param ($vmIpAddress, $AzLIpMap, $domainName)
-                    foreach ($vm in $AzLIpMap.Keys) {
-                        Write-Host "Updating DNS Record for $vm"
-                        $vmIpAddress = $($AzLIpMap)[$vm]
-                        $dnsCheck = Get-DnsServerResourceRecord -Name $vm -ZoneName $domainName -ErrorAction SilentlyContinue
+                    Write-Host "Creating DNS record for $vmName"
+                    Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential `
+                        -ArgumentList $vmIpAddress, $Using:domainName -ScriptBlock {
+                        param ($vmIpAddress, $domainName)
+                        $dnsCheck = Get-DnsServerResourceRecord -Name $vmName -ZoneName $domainName -ErrorAction SilentlyContinue
                         if ($dnsCheck) {
                             $dnsCheck | Remove-DnsServerResourceRecord -ZoneName $domainName -Force
                         }
                         Add-DnsServerResourceRecordA -Name $vm -ZoneName $domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
                     }
                 }
-                # Create a flag to indicate the static IPs have been set
-                # $staticIpFlag = "$Using:flagsPath\StaticIpComplete.txt"
-                # New-Item $staticIpFlag -ItemType file -Force #>
             }
             TestScript = {
                 $state = [scriptblock]::Create($GetScript).Invoke()
