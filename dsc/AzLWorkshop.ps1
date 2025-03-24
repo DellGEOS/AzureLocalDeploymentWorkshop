@@ -695,7 +695,7 @@ configuration AzLWorkshop
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
-            DependsOn  = "[Script]Update DHCP"
+            DependsOn  = "[Script]MSLab CreateParentDisks"
         }
 
         # If the user has chosen to deploy WAC, need to trigger an installation of the latest WAC build
@@ -788,7 +788,7 @@ configuration AzLWorkshop
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
-                DependsOn  = "[Script]Update DHCP"
+                DependsOn  = "[Script]MSLab CreateParentDisks"
             }
         }
         else { 
@@ -1300,6 +1300,9 @@ configuration AzLWorkshop
                     $scriptCredential = New-Object System.Management.Automation.PSCredential (".\Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                     Invoke-Command -VMName $vm.Name -Credential $scriptCredential -ScriptBlock {
                         param ($vm)
+                        Write-Host "Enable ping through the firewall on $($vm.Name)"
+                        # Enable PING through the firewall
+                        Enable-NetFirewallRule -displayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
                         # Get all NICs and check if DHCP is enabled, and if so, disable it
                         Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Enabled' | ForEach-Object {
                             Write-Host "$($vm.Name): Disabling DHCP on $($_.InterfaceAlias)"
@@ -1315,7 +1318,7 @@ configuration AzLWorkshop
             DependsOn  = "[Script]UpdateAzLNicNames"
         }
 
-        Script "UpdateDhcp" {
+        Script "UpdateDhcpScope" {
             GetScript  = {
                 $result = $false
                 return @{ 'Result' = $result }
@@ -1349,14 +1352,98 @@ configuration AzLWorkshop
                 return @{ 'Result' = $result }
             }
             SetScript  = {
-                Write-Host "Blah"
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                $returnedValues = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                    $DhcpScope = Get-DhcpServerv4Scope
+                    $subnetMask = $DhcpScope.SubnetMask.IPAddressToString
+                    $gateway = (Get-DhcpServerv4OptionValue -ScopeId $DhcpScope.ScopeId -OptionId 3).Value
+                    $dnsServers = (Get-DhcpServerv4OptionValue -ScopeId $DhcpScope.ScopeId -OptionId 6).Value
+                    return $DhcpScope, $subnetMask, $gateway, $dnsServers
+                }
 
+                $DhcpScope = $returnedValues[0]
+                $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
+                $subnetMask = $returnedValues[1]
+                $gateway = $returnedValues[2]
+                $dnsServers = $returnedValues[3]
+                $vms = $Using:vms
+
+                # Starting at .11 for the first node, define the IP range for the AzL nodes based on the $azureLocalMachines variable
+                $AzLIpStart = ([ipaddress]("$shortDhcpScope.11"))
+                $AzLIpRange = @()
+                for ($i = 0; $i -lt $Using:azureLocalMachines; $i++) {
+                    $ipBytes = $AzLIpStart.GetAddressBytes()
+                    $ipBytes[3] += $i
+                    $AzLIpRange += [ipaddress]::new($ipBytes)
+                }
+                
+                # Create a hashtable to store the AzL VMs and their IP addresses
+                $AzLIpMap = @{} # Initialize as a hashtable
+                # Iterate through the arrays to create the mapping
+                for ($i = 0; $i -lt $vms.Count; $i++) {
+                    $AzLIpMap[$vms[$i]] = $AzLIpRange[$i].IPAddressToString
+                }
+
+                # Sort the hashtable by $vms and ensure it remains a hashtable
+                $AzLIpMap = [ordered]@{}
+                foreach ($vm in $vms | Sort-Object) {
+                    $AzLIpMap[$vm] = $AzLIpRange[$vms.IndexOf($vm)].IPAddressToString
+                }
+                
+                if ($Using:installWAC -eq 'Yes') {
+                    $wacIP = [ipaddress]("$shortDhcpScope.10")
+                    $AzLIpMap.Add('WAC', $wacIP.IPAddressToString)
+                }
+
+                # Statically assign the IP
+                foreach ($vm in $AzLIpMap.Keys) {
+                    $vmName = "$Using:vmPrefix-$vm"
+                    $vmIpAddress = $AzLIpMap[$vm]
+
+                    $networkAdapter = Get-VMNetworkAdapter -VMName $vmName -Name "Management1"
+                    $vmToUpdate = Get-CimInstance -Namespace "root\virtualization\v2" -ClassName "Msvm_ComputerSystem" | Where-Object ElementName -eq $networkAdapter.VMName
+                    $vmSettings = Get-CimAssociatedInstance -InputObject $vmToUpdate -ResultClassName "Msvm_VirtualSystemSettingData" | Where-Object VirtualSystemType -EQ "Microsoft:Hyper-V:System:Realized"
+                    $vmNetAdapters = Get-CimAssociatedInstance -InputObject $vmSettings -ResultClassName "Msvm_SyntheticEthernetPortSettingData"
+            
+                    $networkAdapterConfiguration = @()
+                    foreach ($netAdapter in $vmNetAdapters) {
+                        if ($netAdapter.ElementName -eq $networkAdapter.Name) {
+                            $networkAdapterConfiguration = Get-CimAssociatedInstance -InputObject $netAdapter -ResultClassName "Msvm_GuestNetworkAdapterConfiguration"
+                            break
+                        }
+                    }
+            
+                    $networkAdapterConfiguration.PSBase.CimInstanceProperties["IPAddresses"].Value = $vmIpAddress
+                    $networkAdapterConfiguration.PSBase.CimInstanceProperties["Subnets"].Value = $subnetMask
+                    $networkAdapterConfiguration.PSBase.CimInstanceProperties["DefaultGateways"].Value = $gateway
+                    $networkAdapterConfiguration.PSBase.CimInstanceProperties["DNSServers"].Value = $dnsServers
+                    $networkAdapterConfiguration.PSBase.CimInstanceProperties["ProtocolIFType"].Value = 4096
+                    $networkAdapterConfiguration.PSBase.CimInstanceProperties["DHCPEnabled"].Value = $false
+            
+                    $cimSerializer = [Microsoft.Management.Infrastructure.Serialization.CimSerializer]::Create()
+                    $serializedInstance = $cimSerializer.Serialize($networkAdapterConfiguration, [Microsoft.Management.Infrastructure.Serialization.InstanceSerializationOptions]::None)
+                    $serializedInstanceString = [System.Text.Encoding]::Unicode.GetString($serializedInstance)
+            
+                    $service = Get-CimInstance -ClassName "Msvm_VirtualSystemManagementService" -Namespace "root\virtualization\v2"
+                    $setIp = Invoke-CimMethod -InputObject $service -MethodName "SetGuestNetworkAdapterConfiguration" -Arguments @{
+                        ComputerSystem       = $vmToUpdate
+                        NetworkConfiguration = @($serializedInstanceString)
+                    }
+                    if ($setIp.ReturnValue -eq 0) {
+                        # completed
+                        Write-Host "Management1 IP on $vmName to $vmIpAddress"
+                    }
+                    else {
+                        # unexpected response
+                        $setIp
+                    }
+                }
             }
             TestScript = {
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
-            DependsOn  = "[Script]UpdateDhcp"
+            DependsOn  = "[Script]UpdateDhcpScope"
         }
 
         Script "UpdateDNSRecords" {
