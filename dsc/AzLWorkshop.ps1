@@ -671,43 +671,6 @@ configuration AzLWorkshop
         The range of $azureLocalMachines is 1-4
         #>
 
-        # Create a switch statement to populate the $vms parameter based on the $azureLocalMachines number
-        $vms = @()
-        switch ($azureLocalMachines) {
-            1 { $vms = @("AzL1") }
-            2 { $vms = @("AzL1", "AzL2") }
-            3 { $vms = @("AzL1", "AzL2", "AzL3") }
-            4 { $vms = @("AzL1", "AzL2", "AzL3", "AzL4") }
-        }
-
-        Script "Update DHCP" {
-            GetScript  = {
-                $result = $false
-                return @{ 'Result' = $result }
-            }
-            SetScript  = {
-                # Get the scope from DHCP by running an Invoke-Command against the DC VM
-                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
-                    $DhcpScope = Get-DhcpServerv4Scope
-                    $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
-                    # Start the scope at 50 to allow for Deployments with SDN optional services
-                    # As per here: https://learn.microsoft.com/en-us/azure/azure-local/plan/three-node-ip-requirements?view=azloc-24113#deployments-with-sdn-optional-services
-                    $newIpStartRange = ($shortDhcpScope + ".50")
-                    Write-Host "Updating DHCP scope to start at $newIpStartRange to allow for additional optional Azure Local services"
-                    Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $DhcpScope.EndRange
-                    Get-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId | Where-Object IPAddress -like "$shortDhcpScope*" | ForEach-Object {
-                        Remove-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId -IPAddress $_.IPAddress
-                    }
-                }
-            }
-            TestScript = {
-                $state = [scriptblock]::Create($GetScript).Invoke()
-                return $state.Result
-            }
-            DependsOn  = "[Script]MSLab DeployEnvironment"
-        }
-
         # Ensure that the DC accepts RDP access
         Script "Enable RDP on DC" {
             GetScript  = {
@@ -891,6 +854,15 @@ configuration AzLWorkshop
                 return $state.Result
             }
             DependsOn  = $updateDCDependsOn
+        }
+
+        # Create a switch statement to populate the $vms parameter based on the $azureLocalMachines number
+        $vms = @()
+        switch ($azureLocalMachines) {
+            1 { $vms = @("AzL1") }
+            2 { $vms = @("AzL1", "AzL2") }
+            3 { $vms = @("AzL1", "AzL2", "AzL3") }
+            4 { $vms = @("AzL1", "AzL2", "AzL3", "AzL4") }
         }
 
         # Create the Host vSwitches and vNICs to align with the desired azureLocalArchitecture
@@ -1316,6 +1288,140 @@ configuration AzLWorkshop
             DependsOn  = $updateAzLNicNamesDependsOn
         }
 
+        Script "DisableDhcpOnVMs" {
+            GetScript  = {
+                $result = $false
+                return @{ 'Result' = $result }
+            }
+            SetScript  = {
+                # Get all VMs that are not the DC and disable DHCP on them
+                $vmName = Get-VM | Where-Object { $_.Name -notlike "$Using:vmPrefix-DC" }
+                ForEach ($vm in $vmName) {
+                    $scriptCredential = New-Object System.Management.Automation.PSCredential (".\Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                    Invoke-Command -VMName $vm.Name -Credential $scriptCredential -ScriptBlock {
+                        param ($vm)
+                        # Get all NICs and check if DHCP is enabled, and if so, disable it
+                        Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Enabled' | ForEach-Object {
+                            Write-Host "$($vm.Name): Disabling DHCP on $($_.InterfaceAlias)"
+                            Set-NetIPInterface -InterfaceAlias $_.InterfaceAlias -Dhcp Disabled
+                        }
+                    }
+                }
+            }
+            TestScript = {
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
+            }
+            DependsOn  = "[Script]UpdateAzLNicNames"
+        }
+
+        Script "UpdateDhcp" {
+            GetScript  = {
+                $result = $false
+                return @{ 'Result' = $result }
+            }
+            SetScript  = {
+                # Get the scope from DHCP by running an Invoke-Command against the DC VM
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                    $DhcpScope = Get-DhcpServerv4Scope
+                    $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
+                    # Start the scope at 50 to allow for Deployments with SDN optional services
+                    # As per here: https://learn.microsoft.com/en-us/azure/azure-local/plan/three-node-ip-requirements?view=azloc-24113#deployments-with-sdn-optional-services
+                    $newIpStartRange = ($shortDhcpScope + ".50")
+                    Write-Host "Updating DHCP scope to start at $newIpStartRange to allow for additional optional Azure Local services"
+                    Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $DhcpScope.EndRange
+                    Get-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId | Where-Object IPAddress -like "$shortDhcpScope*" | ForEach-Object {
+                        Remove-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId -IPAddress $_.IPAddress
+                    }
+                }
+            }
+            TestScript = {
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
+            }
+            DependsOn  = "[Script]DisableDhcpOnVMs"
+        }
+
+        Script "SetStaticIPs" {
+            GetScript  = {
+                $result = $false
+                return @{ 'Result' = $result }
+            }
+            SetScript  = {
+                Write-Host "Blah"
+
+            }
+            TestScript = {
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
+            }
+            DependsOn  = "[Script]UpdateDhcp"
+        }
+
+        Script "UpdateDNSRecords" {
+            GetScript  = {
+                $result = $false
+                return @{ 'Result' = $result }
+            }
+            SetScript  = {
+                $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential `
+                    -ArgumentList $Using:domainName, $Using:azureLocalMachines, $Using:vms -ScriptBlock {
+                    param ($domainName, $azureLocalMachines, $vms)
+
+                    # Get the current DHCP info
+                    $DhcpScope = Get-DhcpServerv4Scope
+                    $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
+
+                    # Starting at .11 for the first AzL node, define the IP range for the AzL nodes based on the $azureLocalMachines variable
+                    $AzLIpStart = ([ipaddress]("$shortDhcpScope.11"))
+                    $AzLIpRange = @()
+                    for ($i = 0; $i -lt $azureLocalMachines; $i++) {
+                        $ipBytes = $AzLIpStart.GetAddressBytes()
+                        $ipBytes[3] += $i
+                        $AzLIpRange += [ipaddress]::new($ipBytes)
+                    }
+                
+                    # Create a hashtable to store the AzL VMs and their IP addresses
+                    $AzLIpMap = @{} # Initialize as a hashtable
+                    # Iterate through the arrays to create the mapping
+                    for ($i = 0; $i -lt $vms.Count; $i++) {
+                        $AzLIpMap[$vms[$i]] = $AzLIpRange[$i].IPAddressToString
+                    }
+
+                    # Sort the hashtable by $vms and ensure it remains a hashtable
+                    $AzLIpMap = [ordered]@{}
+                    foreach ($vm in $vms | Sort-Object) {
+                        $AzLIpMap[$vm] = $AzLIpRange[$vms.IndexOf($vm)].IPAddressToString
+                    }
+                
+                    if ($Using:installWAC -eq 'Yes') {
+                        $wacIP = [ipaddress]("$shortDhcpScope.10")
+                        $AzLIpMap.Add('WAC', $wacIP.IPAddressToString)
+                    }
+
+                    foreach ($vm in $AzLIpMap.Keys) {
+                        $dnsName = $vm
+                        $vmIpAddress = $AzLIpMap[$vm]
+                        # Need to check if any DNS records exist for "AzL*"" or "WAC" and remove them
+                        $dnsCheck = Get-DnsServerResourceRecord -Name $dnsName -ZoneName $domainName
+                        if ($dnsCheck) {
+                            $dnsCheck | Remove-DnsServerResourceRecord -ZoneName $domainName -Force
+                        }
+                        Add-DnsServerResourceRecordA -Name $dnsName -ZoneName $domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
+                    }
+                }
+            }
+            TestScript = {
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
+            }
+            DependsOn  = "[Script]SetStaticIPs"
+        }
+
+        #### Final tasks - Download RDP file, Edit RDP file, and Create RDP RunOnce ####
+
         # Create an RDP file on the desktop to easily remotely connect into the DC
         if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
             $azureUsername = $($Admincreds.UserName)
@@ -1326,7 +1432,7 @@ configuration AzLWorkshop
             $desktopPath = [Environment]::GetFolderPath("Desktop")
             $rdpConfigPath = "$desktopPath\$vmPrefix-DC.rdp"
         }
-
+        
         # Create RDP file for the DC VM
         Script "Download RDP File" {
             GetScript  = {
