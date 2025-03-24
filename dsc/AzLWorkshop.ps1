@@ -1447,7 +1447,7 @@ configuration AzLWorkshop
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
-            DependsOn  = "[Script]UpdateAzLNicNames"
+            DependsOn  = "[Script]UpdateDNSRecords"
         }
 
         # Update the RDP file with customized values for the environment
