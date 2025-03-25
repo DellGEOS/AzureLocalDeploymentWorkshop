@@ -1298,7 +1298,7 @@ configuration AzLWorkshop
                 $vmName = Get-VM | Where-Object { $_.Name -notlike "$Using:vmPrefix-DC" }
                 ForEach ($vm in $vmName) {
                     $scriptCredential = New-Object System.Management.Automation.PSCredential (".\Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                    Invoke-Command -VMName $vm.Name -Credential $scriptCredential -ScriptBlock {
+                    Invoke-Command -VMName $vm.Name -Credential $scriptCredential -ArgumentList $vm -ScriptBlock {
                         param ($vm)
                         Write-Host "Enable ping through the firewall on $($vm.Name)"
                         # Enable PING through the firewall
@@ -1335,7 +1335,7 @@ configuration AzLWorkshop
                     Write-Host "Updating DHCP scope to start at $newIpStartRange to allow for additional optional Azure Local services"
                     Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $DhcpScope.EndRange
                     Get-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId | Where-Object IPAddress -like "$shortDhcpScope*" | ForEach-Object {
-                        Remove-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId -IPAddress $_.IPAddress
+                        Remove-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId
                     }
                 }
             }
@@ -1363,9 +1363,9 @@ configuration AzLWorkshop
 
                 $DhcpScope = $returnedValues[0]
                 $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
-                $subnetMask = $returnedValues[1]
-                $gateway = $returnedValues[2]
-                $dnsServers = $returnedValues[3]
+                $subnetMask = @($returnedValues[1]) # Ensure it is treated as a collection
+                $gateway = @($returnedValues[2])    # Ensure it is treated as a collection
+                $dnsServers = @($returnedValues[3]) # Ensure it is treated as a collection
                 $vms = $Using:vms
 
                 # Starting at .11 for the first node, define the IP range for the AzL nodes based on the $azureLocalMachines variable
@@ -1398,7 +1398,8 @@ configuration AzLWorkshop
                 # Statically assign the IP
                 foreach ($vm in $AzLIpMap.Keys) {
                     $vmName = "$Using:vmPrefix-$vm"
-                    $vmIpAddress = $AzLIpMap[$vm]
+                    $vmIpAddress = @()
+                    $vmIpAddress = @($AzLIpMap[$vm])
 
                     $networkAdapter = Get-VMNetworkAdapter -VMName $vmName -Name "Management1"
                     $vmToUpdate = Get-CimInstance -Namespace "root\virtualization\v2" -ClassName "Msvm_ComputerSystem" | Where-Object ElementName -eq $networkAdapter.VMName
@@ -1454,8 +1455,8 @@ configuration AzLWorkshop
             SetScript  = {
                 $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                 Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential `
-                    -ArgumentList $Using:domainName, $Using:azureLocalMachines, $Using:vms -ScriptBlock {
-                    param ($domainName, $azureLocalMachines, $vms)
+                    -ArgumentList $Using:domainName, $Using:azureLocalMachines, $Using:vms, $Using:installWAC -ScriptBlock {
+                    param ($domainName, $azureLocalMachines, $vms, $installWAC)
 
                     # Get the current DHCP info
                     $DhcpScope = Get-DhcpServerv4Scope
@@ -1483,7 +1484,7 @@ configuration AzLWorkshop
                         $AzLIpMap[$vm] = $AzLIpRange[$vms.IndexOf($vm)].IPAddressToString
                     }
                 
-                    if ($Using:installWAC -eq 'Yes') {
+                    if ($installWAC -eq 'Yes') {
                         $wacIP = [ipaddress]("$shortDhcpScope.10")
                         $AzLIpMap.Add('WAC', $wacIP.IPAddressToString)
                     }
@@ -1492,10 +1493,13 @@ configuration AzLWorkshop
                         $dnsName = $vm
                         $vmIpAddress = $AzLIpMap[$vm]
                         # Need to check if any DNS records exist for "AzL*"" or "WAC" and remove them
-                        $dnsCheck = Get-DnsServerResourceRecord -Name $dnsName -ZoneName $domainName
-                        if ($dnsCheck) {
-                            $dnsCheck | Remove-DnsServerResourceRecord -ZoneName $domainName -Force
+                        Write-Host "Checking for existing DNS Record for $dnsName"
+                        $dnsCheck = Get-DnsServerResourceRecord -Name $dnsName -ZoneName $domainName -ErrorAction SilentlyContinue
+                        foreach ($entry in $dnsCheck) {
+                            Write-Host "Cleaning up existing DNS entry for $($entry.HostName)"
+                            Remove-DnsServerResourceRecord $entry.HostName -ZoneName $domainName -RRType A -Force
                         }
+                        Write-Host "Creating new DNS record for $dnsName with IP: $vmIpAddress in Zone: $domainName"
                         Add-DnsServerResourceRecordA -Name $dnsName -ZoneName $domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
                     }
                 }
