@@ -62,24 +62,60 @@ configuration AzLWorkshop
         # Calculate the number of Azure Local machines based on the architecture
         $azureLocalMachines = if ($azureLocalArchitecture -eq "Single Machine") { 1 } else { [INT]$azureLocalArchitecture.Substring(0, 1) }
 
-        # Determine vSwitch name and allowed VLANs based on azureLocalArchitecture
-        $vSwitchName = if ($azureLocalArchitecture -like "*Fully-Converged*") { "Mgmt_Compute_Stor" } else { "Mgmt_Compute" }
-        $allowedVlans = if ($azureLocalArchitecture -like "*Fully-Converged*") { "1-10,711-719" } else { "1-10" }
-
         # Calculate Host Memory Sizing to account for oversizing
         [INT]$totalFreePhysicalMemory = Get-CimInstance Win32_OperatingSystem -Verbose:$false | ForEach-Object { [math]::round($_.FreePhysicalMemory / 1MB) }
         [INT]$totalInfraMemoryRequired = "4"
         [INT]$memoryAvailable = [INT]$totalFreePhysicalMemory - [INT]$totalInfraMemoryRequired
         [INT]$azureLocalMachineMemoryRequired = ([Int]$azureLocalMachineMemory * [Int]$azureLocalMachines)
+        # If the available memory is less than the required memory, adjust the memory to the next lowest option
         if ($azureLocalMachineMemoryRequired -ge $memoryAvailable) {
             $memoryOptions = 48, 32, 24, 16
-            $x = 0
-            while ($azureLocalMachineMemoryRequired -ge $memoryAvailable) {
+            $x = $memoryOptions.IndexOf($azureLocalMachineMemory) + 1
+            while ($x -ne -1 -and $azureLocalMachineMemoryRequired -ge $memoryAvailable -and $x -lt $memoryOptions.Count) {
+                Write-Host "Memory required: $($azureLocalMachineMemoryRequired)GB, memory available: $($memoryAvailable)GB, New memory option: $($memoryOptions[$x])GB"
+                Write-Host "Testing memory at $($memoryOptions[$x])GB per AzL VM and trying again"
                 $azureLocalMachineMemory = $memoryOptions[$x]
                 $azureLocalMachineMemoryRequired = ([Int]$azureLocalMachineMemory * [Int]$azureLocalMachines)
                 $x++
             }
+            # If the available memory is still less than the required memory, reduce the $azureLocalMachines count by 1 in a loop
+            while ($azureLocalMachineMemoryRequired -ge $memoryAvailable -and $azureLocalMachines -gt 1) {
+                Write-Host "Memory required: $($azureLocalMachineMemoryRequired)GB, memory available: $($memoryAvailable)GB, reducing AzL VM count by 1"
+                $azureLocalMachines--
+                $azureLocalMachineMemoryRequired = ([Int]$azureLocalMachineMemory * [Int]$azureLocalMachines)
+                $nodesReduced = $true
+            }
+            if ($nodesReduced) {
+                # Need to reset the $azureLocalArchitecture to reflect a new number of $azureLocalMachines
+                # if $azureLocalArchitecture is not "Single Machine", take the existing $azureLocalArchitecture and replace the first character with the new $azureLocalMachines count
+                if ($azureLocalArchitecture -ne "Single Machine") {
+                    # Need to ensure you can transition to a valid architecture
+                    # If the new $azureLocalMachines count is 1, the architecture should be "Single Machine"
+                    if ($azureLocalMachines -eq 1) {
+                        $azureLocalArchitecture = "Single Machine"
+                        Write-Host "Switching architecture to Single Machine to fit memory requirements"
+                    }
+                    # if the $azureLocalArchitecture includes "Switchless Dual-Link", the new architecture should also include "Dual-Link"
+                    elseif ($azureLocalArchitecture -like "*Dual-Link*") {
+                        $azureLocalArchitecture = "$($azureLocalMachines)-Machine Switchless Dual-Link"
+                        Write-Host "Switching architecture to $($azureLocalMachines)-Machine Switchless Dual-Link to fit memory requirements"
+                    }
+                    # if the $azureLocalArchitecture includes "Switchless Single-Link", the new architecture should change to "Dual-Link"
+                    elseif ($azureLocalArchitecture -like "*Single-Link*") {
+                        $azureLocalArchitecture = "$($azureLocalMachines)-Machine Switchless Dual-Link"
+                        Write-Host "Switching architecture to $($azureLocalMachines)-Machine Switchless Dual-Link to fit memory requirements"
+                    }
+                    else {
+                        # If the $azureLocalArchitecture includes "Fully-Converged" or "Non-Converged", the new architecture should just reduced the number of machines
+                        $azureLocalArchitecture = "$($azureLocalMachines)-Machine $($azureLocalArchitecture.Split(" ", 2)[1])"
+                    }
+                }
+            }
         }
+
+        # Determine vSwitch name and allowed VLANs based on azureLocalArchitecture
+        $vSwitchName = if ($azureLocalArchitecture -like "*Fully-Converged*") { "Mgmt_Compute_Stor" } else { "Mgmt_Compute" }
+        $allowedVlans = if ($azureLocalArchitecture -like "*Fully-Converged*") { "1-10,711-719" } else { "1-10" }
 
         # Set the workshop path based on the current machine - If this is running in Azure, set the workshop path to V:\AzLWorkshop
         if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
