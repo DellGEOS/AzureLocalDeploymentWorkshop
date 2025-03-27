@@ -642,7 +642,7 @@
                                     "defaultValue": "22:00",
                                     "toolTip": "",
                                     "constraints": {
-                                        "required": false,
+                                        "required": true,
                                         "regex": "",
                                         "validationMessage": "",
                                         "validations": []
@@ -658,7 +658,7 @@
                                     "defaultValue": "(UTC) Coordinated Universal Time",
                                     "toolTip": "",
                                     "constraints": {
-                                        "required": false,
+                                        "required": true,
                                         "allowedValues": [
                                             {
                                                 "label": "(UTC-12:00) International Date Line West",
