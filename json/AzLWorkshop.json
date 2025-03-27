@@ -11,7 +11,7 @@
         },
         "virtualMachineSize": {
             "type": "string",
-            "defaultValue": "Standard_E16s_v4",
+            "defaultValue": "Standard_E16ds_v6",
             "allowedValues": [
                 // Ddv4 sizes series - No Premium Storage, supports temp storage
                 "Standard_D8d_v4",
@@ -480,7 +480,7 @@
                     "imageReference": {
                         "publisher": "MicrosoftWindowsServer",
                         "offer": "WindowsServer",
-                        "sku": "2022-datacenter-g2",
+                        "sku": "2022-datacenter-azure-edition-smalldisk",
                         "version": "latest"
                     },
                     "osDisk": {

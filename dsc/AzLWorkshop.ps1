@@ -131,6 +131,7 @@ configuration AzLWorkshop
         # Set the paths for the workshop
         $mslabLocalPath = "$workshopPath\mslab.zip"
         $labConfigPath = "$workshopPath\LabConfig.ps1"
+        $createParentDisksPath = "$workshopPath\2_CreateParentDisks.ps1"
         $parentDiskPath = "$workshopPath\ParentDisks"
         $updatePath = "$parentDiskPath\Updates"
         $cuPath = "$updatePath\CU"
@@ -322,6 +323,25 @@ configuration AzLWorkshop
                 return $state.Result
             }
             DependsOn  = "[Script]Download MSLab"
+        }
+
+        # Edit the CreateParentDisks script to replace the default VHD names with the custom names to allow flexibility in deployment
+        Script "Edit CreateParentDisks" {
+            GetScript  = {
+                $result = !(Test-Path -Path "$Using:CreateParentDisksPath")
+                return @{ 'Result' = $result }
+            }
+            SetScript  = {
+                $createParentDisksFile = Get-Content -Path "$Using:CreateParentDisksPath"
+                $createParentDisksFile = $createParentDisksFile.Replace('VHDName="Win2022', 'VHDName="WinSvr')
+                $createParentDisksFile = $createParentDisksFile.Replace('VHDName="Win2025', 'VHDName="WinSvr')
+                Out-File -FilePath "$Using:CreateParentDisksPath" -InputObject $createParentDisksFile -Force
+            }
+            TestScript = {
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
+            }
+            DependsOn  = "[Script]Extract MSLab"
         }
 
         # Download the latest customized LabConfig file - this is a script that contains the configuration for the MSLab deployment
