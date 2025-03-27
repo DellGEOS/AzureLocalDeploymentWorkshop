@@ -550,7 +550,7 @@
                         "enabled": true
                     }
                 },
-                "licenseType": "[if(equals(parameters('azureHybridBenefit'), 'True'), 'Windows_Server', 'None')]"
+                "licenseType": "[if(parameters('azureHybridBenefit'), 'Windows_Server', 'None')]" // If Azure Hybrid Benefit is true, apply the license type, otherwise, apply None
             },
             "resources": [
                 {
