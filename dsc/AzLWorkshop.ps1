@@ -46,6 +46,7 @@ configuration AzLWorkshop
         # Set the external endpoints for downloads
         [String]$mslabUri = "https://aka.ms/mslab/download"
         [String]$wsIsoUri = "https://go.microsoft.com/fwlink/p/?LinkID=2195280"
+        # 2025: https://go.microsoft.com/fwlink/?linkid=2293312
         [String]$azureLocalIsoUri = "https://aka.ms/HCIReleaseImage"
         [String]$labConfigUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/labconfig/AzureLocalLabConfig.ps1"
         [String]$rdpConfigUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/rdp/rdpbase.rdp"
@@ -1371,7 +1372,7 @@ configuration AzLWorkshop
                     Write-Host "Updating DHCP scope to start at $newIpStartRange to allow for additional optional Azure Local services"
                     Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $DhcpScope.EndRange
                     Get-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId | Where-Object IPAddress -like "$shortDhcpScope*" | ForEach-Object {
-                        Remove-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId
+                        Remove-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId -Confirm:$false -ErrorAction SilentlyContinue
                     }
                 }
             }
