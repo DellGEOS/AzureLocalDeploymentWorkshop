@@ -788,7 +788,7 @@ configuration AzLWorkshop
                 SetScript  = {
                     $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                     if (!(Test-Path -Path "$Using:flagsPath\StartWACDeploy.txt")) {
-                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ArgumentList -ScriptBlock {
+                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
                             if (-not (Test-Path -Path "C:\WindowsAdminCenter.exe")) {
                                 $ProgressPreference = 'SilentlyContinue'
                                 Write-Host "Downloading Windows Admin Center..."
@@ -807,8 +807,7 @@ configuration AzLWorkshop
                         Write-Host "Windows Admin Center installation has already started. Moving on to check for completion."
                     }
                     if (!(Test-Path -Path "$Using:flagsPath\DeployWACComplete.txt")) {
-                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ArgumentList $Using:flagsPath -ScriptBlock {
-                            param ($flagsPath)
+                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
                             # Start checking for the installation to complete by checking for the log file for the "Log closed." message. This should run for a maximum of 10 minutes
                             $timeout = 600
                             $logCheck = Get-ChildItem -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue | Get-Content | Select-String "Log closed."
@@ -854,9 +853,15 @@ configuration AzLWorkshop
                                     throw "Windows Admin Center installation timed out."
                                 }
                             }
+                        }
+                        # Final check to see if WAC is working
+                        if ((Test-NetConnection -ComputerName "$Using:vmPrefix-WAC" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded) {
                             Write-Host "WAC Deployment complete!"
-                            $wacCompletedFlag = "$flagsPath\DeployWACComplete.txt"
+                            $wacCompletedFlag = "$Using:flagsPath\DeployWACComplete.txt"
                             New-Item $wacCompletedFlag -ItemType file -Force | Out-Null
+                        }
+                        else {
+                            throw "Windows Admin Center installation failed."
                         }
                     }
                     else {
