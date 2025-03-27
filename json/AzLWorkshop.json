@@ -360,13 +360,13 @@
         },
         "azureHybridBenefit": {
             "type": "string",
-            "defaultValue": false,
+            "defaultValue": "False",
             "allowedValues": [
-                false,
-                true
+                "True",
+                "False"
             ],
             "metadata": {
-                "description": "By selecting true, you confirm you have an eligible Windows Server license with Software Assurance or Windows Server subscription to apply this Azure Hybrid Benefit. You can read more about compliance here: http://go.microsoft.com/fwlink/?LinkId=859786"
+                "description": "By entering True, you confirm you have an eligible Windows Server license with Software Assurance or Windows Server subscription to apply this Azure Hybrid Benefit. You can read more about compliance here: http://go.microsoft.com/fwlink/?LinkId=859786"
             }
         }
     },
