@@ -866,10 +866,10 @@ configuration AzLWorkshop
                                 throw "Windows Admin Center installation failed."
                             }
                         }
-                        else {
-                            Write-Host "Windows Admin Center installation has already completed."
-                            return
-                        }
+                    }
+                    else {
+                        Write-Host "Windows Admin Center installation has already completed."
+                        return
                     }
                 }
                 TestScript = {
