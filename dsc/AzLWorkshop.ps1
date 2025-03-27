@@ -45,8 +45,8 @@ configuration AzLWorkshop
 
         # Set the external endpoints for downloads
         [String]$mslabUri = "https://aka.ms/mslab/download"
-        [String]$wsIsoUri = "https://go.microsoft.com/fwlink/p/?LinkID=2195280"
-        # 2025: https://go.microsoft.com/fwlink/?linkid=2293312
+        # [String]$wsIsoUri = "https://go.microsoft.com/fwlink/p/?LinkID=2195280" # Windows Server 2022
+        [String]$wsIsoUri = "https://go.microsoft.com/fwlink/p/?LinkID=2293312" # Windows Server 2025
         [String]$azureLocalIsoUri = "https://aka.ms/HCIReleaseImage"
         [String]$labConfigUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/labconfig/AzureLocalLabConfig.ps1"
         [String]$rdpConfigUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/rdp/rdpbase.rdp"
@@ -160,7 +160,7 @@ configuration AzLWorkshop
             }
             if (!$WindowsServerIsoPath) {
                 $wsIsoPath = "$isoPath\WS"
-                $wsISOLocalPath = "$wsIsoPath\WS2022.iso"
+                $wsISOLocalPath = "$wsIsoPath\WinSvr.iso"
             }
             else {
                 $wsISOLocalPath = $WindowsServerIsoPath
@@ -169,7 +169,7 @@ configuration AzLWorkshop
         }
         else {
             $wsIsoPath = "$isoPath\WS"
-            $wsISOLocalPath = "$wsIsoPath\WS2022.iso"
+            $wsISOLocalPath = "$wsIsoPath\WinSvr.iso"
             $azLocalIsoPath = "$isoPath\AzureLocal"
             $azLocalISOLocalPath = "$azLocalIsoPath\AzureLocal.iso"
         }
@@ -367,7 +367,7 @@ configuration AzLWorkshop
 
                 # customize the lab config file based on WAC being installed or not
                 if ($Using:installWAC -eq "Yes") {
-                    $labConfigFile = $labConfigFile.Replace("<<installWAC>>", '$LabConfig.VMs += @{ VMName = ''WAC'' ; ParentVHD = ''Win2022Core_G2.vhdx'' ; MGMTNICs = 1 }')
+                    $labConfigFile = $labConfigFile.Replace("<<installWAC>>", '$LabConfig.VMs += @{ VMName = ''WAC'' ; ParentVHD = ''WinSvrCore_G2.vhdx'' ; MGMTNICs = 1 }')
                 }
                 else {
                     $labConfigFile = $labConfigFile.Replace("<<installWAC>>", '')
