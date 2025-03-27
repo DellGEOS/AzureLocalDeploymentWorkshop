@@ -856,18 +856,20 @@ configuration AzLWorkshop
                             }
                         }
                         # Final check to see if WAC is working
-                        if ((Test-NetConnection -ComputerName "$Using:vmPrefix-WAC" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded) {
-                            Write-Host "WAC Deployment complete!"
-                            $wacCompletedFlag = "$Using:flagsPath\DeployWACComplete.txt"
-                            New-Item $wacCompletedFlag -ItemType file -Force | Out-Null
+                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
+                            if ((Test-NetConnection -ComputerName "localhost" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded) {
+                                Write-Host "WAC Deployment complete!"
+                                $wacCompletedFlag = "$Using:flagsPath\DeployWACComplete.txt"
+                                New-Item $wacCompletedFlag -ItemType file -Force | Out-Null
+                            }
+                            else {
+                                throw "Windows Admin Center installation failed."
+                            }
                         }
                         else {
-                            throw "Windows Admin Center installation failed."
+                            Write-Host "Windows Admin Center installation has already completed."
+                            return
                         }
-                    }
-                    else {
-                        Write-Host "Windows Admin Center installation has already completed."
-                        return
                     }
                 }
                 TestScript = {
