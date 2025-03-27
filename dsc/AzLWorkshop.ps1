@@ -788,7 +788,7 @@ configuration AzLWorkshop
                 SetScript  = {
                     $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                     if (!(Test-Path -Path "$Using:flagsPath\StartWACDeploy.txt")) {
-                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
+                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ArgumentList -ScriptBlock {
                             if (-not (Test-Path -Path "C:\WindowsAdminCenter.exe")) {
                                 $ProgressPreference = 'SilentlyContinue'
                                 Write-Host "Downloading Windows Admin Center..."
@@ -807,7 +807,8 @@ configuration AzLWorkshop
                         Write-Host "Windows Admin Center installation has already started. Moving on to check for completion."
                     }
                     if (!(Test-Path -Path "$Using:flagsPath\DeployWACComplete.txt")) {
-                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
+                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ArgumentList $Using:flagsPath -ScriptBlock {
+                            param ($flagsPath)
                             # Start checking for the installation to complete by checking for the log file for the "Log closed." message. This should run for a maximum of 10 minutes
                             $timeout = 600
                             $logCheck = Get-ChildItem -Path "C:\WindowsAdminCenter.log" -ErrorAction SilentlyContinue | Get-Content | Select-String "Log closed."
@@ -822,15 +823,24 @@ configuration AzLWorkshop
                             }
                             # Check the Windows Admin Center key services using a foreach loop
                             $services = @("WindowsAdminCenter", "WindowsAdminCenterAccountManagement")
+                            $timeout = 600
                             foreach ($service in $services) {
                                 $serviceStatus = Get-Service $service -ErrorAction SilentlyContinue
-                                if ($serviceStatus -and $serviceStatus.Status -ne "Running") {
+                                while ($serviceStatus -and $serviceStatus.Status -ne "Running") {
                                     Write-Host "Windows Admin Center is installed but the $service service is not running. Attempting to start the service."
-                                    Start-Service $service -ErrorAction Stop
+                                    Start-Service $service -Confirm:$false -ErrorAction SilentlyContinue
                                     if ((Get-Service $service -ErrorAction SilentlyContinue).Status -eq "Running") {
                                         Write-Host "$service service started successfully."
                                         Write-Host "Windows Admin Center is installed and running."
                                         break
+                                    }
+                                    else {
+                                        Write-Host "Waiting 20 seconds for $service service to start."
+                                        Start-Sleep -Seconds 20
+                                        $timeout -= 20
+                                        if ($timeout -le 0) {
+                                            throw "Windows Admin Center installation timed out during service enablement."
+                                        }
                                     }
                                 }
                             }
@@ -844,10 +854,10 @@ configuration AzLWorkshop
                                     throw "Windows Admin Center installation timed out."
                                 }
                             }
+                            Write-Host "WAC Deployment complete!"
+                            $wacCompletedFlag = "$flagsPath\DeployWACComplete.txt"
+                            New-Item $wacCompletedFlag -ItemType file -Force | Out-Null
                         }
-                        Write-Host "WAC Deployment complete!"
-                        $wacCompletedFlag = "$Using:flagsPath\DeployWACComplete.txt"
-                        New-Item $wacCompletedFlag -ItemType file -Force | Out-Null
                     }
                     else {
                         Write-Host "Windows Admin Center installation has already completed."
