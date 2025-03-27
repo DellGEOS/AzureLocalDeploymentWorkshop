@@ -45,8 +45,8 @@ configuration AzLWorkshop
 
         # Set the external endpoints for downloads
         [String]$mslabUri = "https://aka.ms/mslab/download"
-        # [String]$wsIsoUri = "https://go.microsoft.com/fwlink/p/?LinkID=2195280" # Windows Server 2022
-        [String]$wsIsoUri = "https://go.microsoft.com/fwlink/p/?LinkID=2293312" # Windows Server 2025
+        [String]$wsIsoUri = "https://go.microsoft.com/fwlink/p/?LinkID=2195280" # Windows Server 2022
+        # [String]$wsIsoUri = "https://go.microsoft.com/fwlink/p/?LinkID=2293312" # Windows Server 2025
         [String]$azureLocalIsoUri = "https://aka.ms/HCIReleaseImage"
         [String]$labConfigUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/labconfig/AzureLocalLabConfig.ps1"
         [String]$rdpConfigUri = "https://raw.githubusercontent.com/DellGEOS/AzureLocalDeploymentWorkshop/main/artifacts/rdp/rdpbase.rdp"
