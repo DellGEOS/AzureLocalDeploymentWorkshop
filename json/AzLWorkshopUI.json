@@ -655,7 +655,7 @@
                                     "type": "Microsoft.Common.DropDown",
                                     "label": "Auto-Shutdown Time Zone",
                                     "subLabel": "",
-                                    "defaultValue": "(UTC) Coordinated Universal Time",
+                                    "defaultValue": "UTC",
                                     "toolTip": "",
                                     "constraints": {
                                         "required": false,
