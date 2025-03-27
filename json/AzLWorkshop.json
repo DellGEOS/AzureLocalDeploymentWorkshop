@@ -13,12 +13,6 @@
             "type": "string",
             "defaultValue": "Standard_E16s_v4",
             "allowedValues": [
-                // Dsv4 sizes series - Supports Premium Storage, no temp storage
-                "Standard_D8s_v4",
-                "Standard_D16s_v4",
-                "Standard_D32s_v4",
-                "Standard_D48s_v4",
-                "Standard_D64s_v4",
                 // Ddv4 sizes series - No Premium Storage, supports temp storage
                 "Standard_D8d_v4",
                 "Standard_D16d_v4",
@@ -31,18 +25,6 @@
                 "Standard_D32ds_v4",
                 "Standard_D48ds_v4",
                 "Standard_D64ds_v4",
-                // Dv5 sizes series - No Premium Storage, no temp storage
-                "Standard_D8_v5",
-                "Standard_D16_v5",
-                "Standard_D32_v5",
-                "Standard_D48_v5",
-                "Standard_D64_v5",
-                // Dsv5 sizes series - Supports Premium Storage, no temp storage
-                "Standard_D8s_v5",
-                "Standard_D16s_v5",
-                "Standard_D32s_v5",
-                "Standard_D48s_v5",
-                "Standard_D64s_v5",
                 // Ddv5 sizes series - No Premium Storage, supports temp storage
                 "Standard_D8d_v5",
                 "Standard_D16d_v5",
@@ -55,30 +37,12 @@
                 "Standard_D32ds_v5",
                 "Standard_D48ds_v5",
                 "Standard_D64ds_v5",
-                // Dsv6 sizes series - Supports Premium Storage, no temp storage
-                "Standard_D8s_v6",
-                "Standard_D16s_v6",
-                "Standard_D32s_v6",
-                "Standard_D48s_v6",
-                "Standard_D64s_v6",
                 // Ddsv6 sizes series - Supports Premium Storage and temp storage
                 "Standard_D8ds_v6",
                 "Standard_D16ds_v6",
                 "Standard_D32ds_v6",
                 "Standard_D48ds_v6",
                 "Standard_D64ds_v6",
-                // Esv4 sizes series - Supports Premium Storage, no temp storage
-                "Standard_E8s_v4",
-                "Standard_E16s_v4",
-                "Standard_E16-8s_v4",
-                "Standard_E20s_v4",
-                "Standard_E32s_v4",
-                "Standard_E32-8s_v4",
-                "Standard_E32-16s_v4",
-                "Standard_E48s_v4",
-                "Standard_E64s_v4",
-                "Standard_E64-16s_v4",
-                "Standard_E64-32s_v4",
                 // Edv4 sizes series - No Premium Storage, supports temp storage
                 "Standard_E8d_v4",
                 "Standard_E16d_v4",
@@ -95,20 +59,6 @@
                 "Standard_E64ds_v4",
                 "Standard_E64-16ds_v4",
                 "Standard_E64-32ds_v4",
-                // Ev5 sizes series - No Premium Storage, no temp storage
-                "Standard_E8_v5",
-                "Standard_E16_v5",
-                "Standard_E20_v5",
-                "Standard_E32_v5",
-                "Standard_E48_v5",
-                "Standard_E64_v5",
-                // Esv5 sizes series - Supports Premium Storage, no temp storage
-                "Standard_E8s_v5",
-                "Standard_E16s_v5",
-                "Standard_E20s_v5",
-                "Standard_E32s_v5",
-                "Standard_E48s_v5",
-                "Standard_E64s_v5",
                 // Edv5 sizes series - No Premium Storage, supports temp storage
                 "Standard_E8d_v5",
                 "Standard_E16d_v5",
@@ -123,13 +73,6 @@
                 "Standard_E32ds_v5",
                 "Standard_E48ds_v5",
                 "Standard_E64ds_v5",
-                // Esv6 sizes series - Supports Premium Storage, no temp storage
-                "Standard_E8s_v6",
-                "Standard_E16s_v6",
-                "Standard_E20s_v6",
-                "Standard_E32s_v6",
-                "Standard_E48s_v6",
-                "Standard_E64s_v6",
                 // Edsv6 sizes series - Supports Premium Storage and temp storage
                 "Standard_E8ds_v6",
                 "Standard_E16ds_v6",
@@ -138,17 +81,6 @@
                 "Standard_E48ds_v6",
                 "Standard_E64ds_v6"
             ]
-        },
-        "virtualMachineGeneration": {
-            "type": "string",
-            "defaultValue": "Generation 2",
-            "allowedValues": [
-                "Generation 1",
-                "Generation 2"
-            ],
-            "metadata": {
-                "description": "Select your VM generation, ideally Gen 2. Not all Azure regions support Gen 2 VMs."
-            }
         },
         "azureLocalArchitecture": {
             "type": "string",
@@ -426,15 +358,15 @@
                 "Yakutsk Standard Time"
             ]
         },
-        "alreadyHaveAWindowsServerLicense": {
+        "azureHybridBenefit": {
             "type": "string",
-            "defaultValue": "No",
+            "defaultValue": "False",
             "allowedValues": [
-                "Yes",
-                "No"
+                "True",
+                "False"
             ],
             "metadata": {
-                "description": "By selecting Yes, you confirm you have an eligible Windows Server license with Software Assurance or Windows Server subscription to apply this Azure Hybrid Benefit. You can read more about compliance here: http://go.microsoft.com/fwlink/?LinkId=859786"
+                "description": "By selecting True, you confirm you have an eligible Windows Server license with Software Assurance or Windows Server subscription to apply this Azure Hybrid Benefit. You can read more about compliance here: http://go.microsoft.com/fwlink/?LinkId=859786"
             }
         }
     },
@@ -580,7 +512,7 @@
                     "imageReference": {
                         "publisher": "MicrosoftWindowsServer",
                         "offer": "WindowsServer",
-                        "sku": "[if(equals(parameters('virtualMachineGeneration'), 'Generation 2'), '2022-datacenter-g2', '2022-datacenter')]",
+                        "sku": "2025-datacenter-azure-edition-smalldisk",
                         "version": "latest"
                     },
                     "osDisk": {
@@ -618,7 +550,7 @@
                         "enabled": true
                     }
                 },
-                "licenseType": "[if(equals(parameters('alreadyHaveAWindowsServerLicense'), 'Yes'), 'Windows_Server', 'None')]"
+                "licenseType": "[if(equals(parameters('azureHybridBenefit'), 'True'), 'Windows_Server', 'None')]"
             },
             "resources": [
                 {
