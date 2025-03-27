@@ -773,13 +773,12 @@ configuration AzLWorkshop
             Script "Deploy WAC" {
                 GetScript  = {
                     $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                    $result = Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
+                    $result = (Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
                         Write-Host "Checking if Windows Admin Center is installed and running..."
                         [bool] (((Get-Service -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" })`
                                     -and (Get-Service -Name "WindowsAdminCenterAccountManagement" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }))`
-                                -and (Test-NetConnection -ComputerName "localhost" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded) `
-                            -and (Test-Path -Path "$Using:flagsPath\DeployWACComplete.txt")
-                    }
+                                -and (Test-NetConnection -ComputerName "localhost" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded)
+                    }) -and (Test-Path -Path "$Using:flagsPath\DeployWACComplete.txt")
                     # Write a message if the result is true, that installation must already be complete
                     if ($result) {
                         Write-Host "Windows Admin Center is already installed and running."
