@@ -597,24 +597,37 @@ configuration AzLWorkshop
 
         # Enable and configure Hyper-V
         $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
-        if ($osInfo.ProductType -eq 3) {
+
+        # First, check if $osInfo.BuildNumber is greater than or equal to 26100 and $osInfo.ProductType -eq 3
+        if ($osInfo.BuildNumber -ge 26100 -and $osInfo.ProductType -eq 3) {
+            WindowsOptionalFeature "Hyper-V" {
+                Name   = "Microsoft-Hyper-V"
+                Ensure = "Enable"
+            }
+            VMHost "ConfigureHyper-V" {
+                IsSingleInstance          = 'yes'
+                EnableEnhancedSessionMode = $true
+                DependsOn                 = "[WindowsOptionalFeature]Hyper-V"
+            }
+        }
+        # Catch for Windows Server OS 2022
+        elseif ($osInfo.ProductType -eq 3) {
             WindowsFeature "Hyper-V" {
                 Name   = "Hyper-V"
                 Ensure = "Present"
             }
-    
             WindowsFeature "RSAT-Hyper-V-Tools" {
                 Name      = "RSAT-Hyper-V-Tools"
                 Ensure    = "Present"
                 DependsOn = "[WindowsFeature]Hyper-V" 
             }
-    
             VMHost "ConfigureHyper-V" {
                 IsSingleInstance          = 'yes'
                 EnableEnhancedSessionMode = $true
                 DependsOn                 = "[WindowsFeature]Hyper-V"
             }
         }
+        # Catch for Windows Client OS
         else {
             WindowsOptionalFeature "Hyper-V" {
                 Name   = "Microsoft-Hyper-V-All"
