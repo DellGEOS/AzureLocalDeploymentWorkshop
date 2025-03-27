@@ -18,4 +18,4 @@ $LabConfig = @{ DomainAdminName = '<<DomainAdminName>>'; AdminPassword = '<<Admi
 <<installWAC>>
 
 #Management machine
-#$LabConfig.VMs += @{ VMName = 'MGMT' ; ParentVHD = 'Win2022_G2.vhdx'; MGMTNICs=1 ; AddToolsVHD=$True }
+#$LabConfig.VMs += @{ VMName = 'MGMT' ; ParentVHD = 'WinSvr_G2.vhdx'; MGMTNICs=1 ; AddToolsVHD=$True }
