@@ -777,7 +777,8 @@ configuration AzLWorkshop
                         Write-Host "Checking if Windows Admin Center is installed and running..."
                         [bool] (((Get-Service -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" })`
                                     -and (Get-Service -Name "WindowsAdminCenterAccountManagement" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }))`
-                                -and (Test-NetConnection -ComputerName "localhost" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded)
+                                -and (Test-NetConnection -ComputerName "localhost" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded) `
+                            -and (Test-Path -Path "$Using:flagsPath\DeployWACComplete.txt")
                     }
                     # Write a message if the result is true, that installation must already be complete
                     if ($result) {
