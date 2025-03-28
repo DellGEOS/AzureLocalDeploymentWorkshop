@@ -855,10 +855,11 @@ configuration AzLWorkshop
                             }
                         }
                         # Final check to see if WAC is working
-                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
+                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ArgumentList $Using:flagsPath -ScriptBlock {
                             if ((Test-NetConnection -ComputerName "localhost" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded) {
+                                param($flagsPath)
                                 Write-Host "WAC Deployment complete!"
-                                $wacCompletedFlag = "$Using:flagsPath\DeployWACComplete.txt"
+                                $wacCompletedFlag = "$flagsPath\DeployWACComplete.txt"
                                 New-Item $wacCompletedFlag -ItemType file -Force | Out-Null
                             }
                             else {
@@ -934,6 +935,8 @@ configuration AzLWorkshop
                     # Trigger an explorer restart to apply the wallpaper
                     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
                     Start-Sleep -Seconds 5
+                    # Update Edge
+                    Start-Process -FilePath "C:\Program Files (x86)\Microsoft\EdgeUpdate\MicrosoftEdgeUpdate.exe" -argumentlist "/silent /install appguid={56EB18F8-B008-4CBD-B6D2-8C97FE7E9062}&appname=Microsoft%20Edge&needsadmin=True"
                 }
             }
             TestScript = {
