@@ -856,8 +856,8 @@ configuration AzLWorkshop
                         }
                         # Final check to see if WAC is working
                         Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ArgumentList $Using:flagsPath -ScriptBlock {
+                            param($flagsPath)
                             if ((Test-NetConnection -ComputerName "localhost" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded) {
-                                param($flagsPath)
                                 Write-Host "WAC Deployment complete!"
                                 $wacCompletedFlag = "$flagsPath\DeployWACComplete.txt"
                                 New-Item $wacCompletedFlag -ItemType file -Force | Out-Null
