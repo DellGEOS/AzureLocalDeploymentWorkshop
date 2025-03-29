@@ -774,11 +774,11 @@ configuration AzLWorkshop
                 GetScript  = {
                     $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                     $result = (Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
-                        Write-Host "Checking if Windows Admin Center is installed and running..."
-                        [bool] (((Get-Service -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" })`
-                                    -and (Get-Service -Name "WindowsAdminCenterAccountManagement" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }))`
-                                -and (Test-NetConnection -ComputerName "localhost" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded)
-                    }) -and (Test-Path -Path "$Using:flagsPath\DeployWACComplete.txt")
+                            Write-Host "Checking if Windows Admin Center is installed and running..."
+                            [bool] (((Get-Service -Name "WindowsAdminCenter" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" })`
+                                        -and (Get-Service -Name "WindowsAdminCenterAccountManagement" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }))`
+                                    -and (Test-NetConnection -ComputerName "localhost" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded)
+                        }) -and (Test-Path -Path "$Using:flagsPath\DeployWACComplete.txt")
                     # Write a message if the result is true, that installation must already be complete
                     if ($result) {
                         Write-Host "Windows Admin Center is already installed and running."
@@ -855,16 +855,17 @@ configuration AzLWorkshop
                             }
                         }
                         # Final check to see if WAC is working
-                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ArgumentList $Using:flagsPath -ScriptBlock {
-                            param($flagsPath)
-                            if ((Test-NetConnection -ComputerName "localhost" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded) {
-                                Write-Host "WAC Deployment complete!"
-                                $wacCompletedFlag = "$flagsPath\DeployWACComplete.txt"
-                                New-Item $wacCompletedFlag -ItemType file -Force | Out-Null
-                            }
-                            else {
-                                throw "Windows Admin Center installation failed."
-                            }
+                        $finalWACCheck = Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
+                            (Test-NetConnection -ComputerName "localhost" -Port 443 -ErrorAction SilentlyContinue).TcpTestSucceeded
+                        }
+                        if ($finalWACCheck) {
+                            Write-Host "Windows Admin Center is now accessible on port 443."
+                            Write-Host "WAC Deployment complete!"
+                            $wacCompletedFlag = "$Using:flagsPath\DeployWACComplete.txt"
+                            New-Item $wacCompletedFlag -ItemType file -Force | Out-Null
+                        }
+                        else {
+                            throw "Windows Admin Center installation failed. Unable to access WAC on port 443."
                         }
                     }
                     else {
