@@ -936,6 +936,26 @@ configuration AzLWorkshop
                     # Trigger an explorer restart to apply the wallpaper
                     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
                     Start-Sleep -Seconds 5
+                    # Install required PS Modules
+                    Write-Host "Installing required PowerShell modules to ease updating of Microsoft Edge..."
+                    Install-PackageProvider PowerShellGet -Force
+                    Install-Module Evergreen -Force
+                    # Find the latest path to current Microsoft Edge Binaries
+                    $edgeURI = (Get-EvergreenApp -Name MicrosoftEdge | `
+                            Where-Object { $_.Architecture -eq "x64" -and $_.Channel -eq "Stable" -and $_.Release -eq "Enterprise" }).URI
+                    # Download the file using bits transfer if the file doesn't already exist
+                    $edgePath = "C:\MicrosoftEdgeEnterpriseX64.msi"
+                    if (!(Test-Path -Path "$edgePath")) {
+                        Write-Host "Downloading latest Microsoft Edge Enterprise MSI..."
+                        $ProgressPreference = 'SilentlyContinue'   
+                        Start-BitsTransfer -Source $edgeURI -Destination $edgePath -ErrorAction SilentlyContinue
+                    }
+                    else {
+                        Write-Host "Microsoft Edge Enterprise MSI already exists. Skipping download."
+                    }
+                    # Install the file using msiexec
+                    Write-Host "Installing Microsoft Edge Enterprise..."
+                    Start-Process msiexec.exe -ArgumentList "/i $edgePath /quiet /norestart" -Wait -NoNewWindow
                 }
             }
             TestScript = {
