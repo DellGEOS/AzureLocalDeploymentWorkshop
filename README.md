@@ -39,7 +39,7 @@ As you can see from the graphic, you'll **firstly need a Hyper-V host** - this c
 
 Don't worry about the details for now, I'll provide more details later.
 
-Once you have a host, the automation takes care of spinning up a custom sandbox environment, comprising of **1-4 nested Azure Local machines** (meaning, you can test all of the different architecture types across single-node, through non-and-fully-converged networks, plus switchless configurations), a **Domain Controller**, and optionally, a server running Windows Admin Center. This is pretty much everything you need to test Azure Local, and it'll be ready in about an hour.
+Once you have a host, the automation takes care of spinning up a custom sandbox environment, comprising of **1-4 nested Azure Local machines** (meaning, you can test all of the different architecture types across single-node, through non-and-fully-converged network patterns, plus switchless configurations), a **Domain Controller**, and optionally, a server running Windows Admin Center. This is pretty much everything you need to test Azure Local, and it'll be ready in about an hour.
 
 ### What's NOT getting deployed?
 
