@@ -22,7 +22,7 @@ So, what's so different about the Azure Local Deployment Workshop?
 
 **The Azure Local Deployment Workshop:**
 
-- Can run in nested in Azure **and** can be deployed identically on-premises, either on a physical Windows Server/Client, or inside an existing VM on a virtualization platform of your choice. This saves you money, if you have existing equipment.
+- Can run nested in Azure **and** can be deployed identically on-premises, either on a physical Windows Server/Client, or inside an existing VM on a virtualization platform of your choice. This saves you money, if you have existing equipment.
 - When running in Azure, the resources configured inside the VM, and the VM configurations themselves are **optimized to keep costs lower than alternative solutions**.
 - The deployment of the sandbox is **fully automated** - no need to download ISOs, executables, zip files etc - within a few simple PowerShell commands (or through an Azure ARM Template) you'll be ready to practice deployments.
 - The automation creates a sandbox to **more closely mimic real world deployments**, for example, when deploying a 4-machine Switchless Dual-Link configuration, should every Azure Local machine be able to communicate with every other machine over a generic switch configuration? NO! This workshop simulates real-world configurations, with isolated network paths and more, to ensure you can experience deployments the right way.
@@ -45,7 +45,7 @@ Once you have a host, the automation takes care of spinning up a custom sandbox 
 
 ### What's NOT getting deployed?
 
-The goal of this workshop is to help you learn how to deploy the Azure Local instance, configuring your machines, networks and more along the way. So, you're not getting a completed deployment once the automation has finished! What would you learn from that? if that's your goal, to have a completed instance once the automation has finished, then the [Azure Arc Jumpstart](https://jumpstart.azure.com/azure_jumpstart_hcibox) is a better fit.
+The goal of this workshop is to help you **learn how to deploy the Azure Local instance**, configuring your machines, networks and more along the way. So, you're not getting a completed deployment once the automation has finished! What would you learn from that? if that's your goal, to have a completed instance once the automation has finished, then the [Azure Arc Jumpstart](https://jumpstart.azure.com/azure_jumpstart_hcibox) is a better fit.
 
 If you want to experience **actual deployments of Azure Local instances**, read on....
 
