@@ -1,6 +1,6 @@
-![Azure local Deployment Workshop Banner](/media/MainBanner.png)
-
 # Azure Local Deployment Workshop
+
+![Azure local Deployment Workshop Banner](/media/MainBanner.png)
 
 ## Welcome
 
@@ -10,9 +10,9 @@ Written by me, Matt McSpirit, Microsoft Azure MVP and Engineering Technologist a
 
 Since the transition from Azure Stack HCI 22H2, to 23H2, and the evolution to Azure Local, the overall solution has grown in complexity - firewall and outbound connectvity, identity integration, Azure permissions, network configuration and more, and whilst the documentation is improving, the availability of a fast-to-deploy sandbox environment with accompanying documentation, that can be used to accurately mimic a real-world physical deployment has been sorely lacking. That's where this workshop comes in.
 
-## How is this different to other environments and Jumpstarts?
+## How is this different to other environments and jumpstarts?
 
-There are a number of different options out there to help build your knowledge. This includes [MSLab](https://github.com/microsoft/MSLab), written by my peer Jaromir Kaspar, which provides a plethora of options for deploying a variety of different configurations and scenarios around Azure Local and Windows Server. 
+There are a number of different options out there to help build your knowledge. This includes [MSLab](https://github.com/microsoft/MSLab), written by my peer Jaromir Kaspar, which provides a plethora of options for deploying a variety of different configurations and scenarios around Azure Local and Windows Server.
 
 There's also the [Azure Arc Jumpstart](https://jumpstart.azure.com/azure_jumpstart_hcibox), which provides a complete, automated sandbox for exploring Azure Local capabilities and hybrid cloud integration in a virtual environment.
 
