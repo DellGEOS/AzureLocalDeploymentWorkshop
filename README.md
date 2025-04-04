@@ -2,9 +2,9 @@
 
 # Azure Local Deployment Workshop
 
-## Welcome to the Azure Local Deployment Workshop
+## Welcome
 
-Written by me, Matt McSpirit, Microsoft Azure MVP and Engineering Technologist at Dell Technologies, the goal of this workshop is simple; to **help you grow your knowledge, skills and experience around preparing for, and subsequently deploying Azure Local**.
+Written by me, Matt McSpirit, Microsoft Azure MVP and Engineering Technologist at Dell Technologies, the goal of the Azure Local Deployment Workshop is simple; to **help you grow your knowledge, skills and experience around preparing for, and subsequently deploying Azure Local**.
 
 ## About the workshop
 
@@ -42,6 +42,7 @@ Don't worry about the details for now, I'll provide more details later.
 Once you have a host, the automation takes care of spinning up a custom sandbox environment, comprising of **1-4 nested Azure Local machines** (meaning, you can test all of the different architecture types across single-node, through non-and-fully-converged networks, plus switchless configurations), a **Domain Controller**, and optionally, a server running Windows Admin Center. This is pretty much everything you need to test Azure Local, and it'll be ready in about an hour.
 
 ### What's NOT getting deployed?
+
 The goal of this workshop is to help you learn how to deploy the Azure Local instance, configuring your machines, networks and more along the way. So, you're not getting a completed deployment once the automation has finished! What would you learn from that? if that's your goal, to have a completed instance once the automation has finished, then the [Azure Arc Jumpstart](https://jumpstart.azure.com/azure_jumpstart_hcibox) is a better fit.
 
 If you want to experience **actual deployments of Azure Local instances**, read on....
@@ -73,7 +74,6 @@ If you're ready to start your learning, head on over to the first module, to fam
 If you notice something is wrong with the workshop, such as a step isn't working, or something just doesn't make sense - help us to make this guide better!  [Raise an issue in GitHub](https://github.com/DellGEOS/AzureLocalDeploymentWorkshop/issues), and we'll be sure to fix this as quickly as possible!
 
 ## Contributions & Legal
-
 
 ### Contributing
 
