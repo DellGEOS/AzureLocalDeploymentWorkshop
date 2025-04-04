@@ -4,7 +4,9 @@
 
 ## Welcome
 
-Written by me, Matt McSpirit, Microsoft Azure MVP and Engineering Technologist at Dell Technologies, the goal of the Azure Local Deployment Workshop is simple; to **help you grow your knowledge, skills and experience around preparing for, and subsequently deploying Azure Local**.
+Hello! I'm Matt McSpirit, Microsoft Azure MVP and Engineering Technologist at Dell Technologies, welcoming you to the Azure Local Deployment Workshop.
+
+The goal of the Azure Local Deployment Workshop is simple; to **help you grow your knowledge, skills and experience around preparing for, and subsequently deploying Azure Local**.
 
 ## About the workshop
 
