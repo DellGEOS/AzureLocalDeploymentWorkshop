@@ -1,100 +1,85 @@
-![Hybrid Jumpstart Banner](/media/MainBannerNew.png)
+![Azure local Deployment Workshop Banner](/media/MainBanner.png)
 
-Dell Technologies & Microsoft | Hybrid Jumpstart
-==============
+# Azure Local Deployment Workshop
 
-## Welcome to the Hybrid Jumpstart
-The goal of this jumpstart is to help you grow your knowledge, skills and experience around a number of core hybrid cloud solutions from the Dell Technologies and Microsoft hybrid portfolio. This ever-growing portfolio is infused with deep joint-engineering work, resulting in a set of integrated technologies that truly can transform and future-proof your business.
+## Welcome to the Azure Local Deployment Workshop
 
-About the jumpstart
------------
-In this jumpstart, you'll learn about, and gain hands-on experience with a number of hybrid technologies within the Dell Technologies and Microsoft hybrid cloud portfolios. The following graphic depicts the different building blocks that make up the hybrid solution, and which you'll explore throughout the modules in this jumpstart:
+Written by me, Matt McSpirit, Microsoft Azure MVP and Engineering Technologist at Dell Technologies, the goal of this workshop is simple; to help you grow your knowledge, skills and experience around preparing for, and subsequently deploying Azure Local.
 
-![Hybrid Solution Architecture](media/HybridSolutionArchitectureUpdated.png)
+## About the workshop
 
-There's a lot to digest in this graphic, so let's break down the different layers.
+Since the transition from Azure Stack HCI 22H2, to 23H2, and the evolution to Azure Local, the overall solution has grown in complexity - firewall and outbound connectvity, identity integration, Azure permissions, network configuration and more, and whilst the documentation is improving, the availability of a fast-to-deploy sandbox environment with accompanying documentation, that can be used to accurately mimic a real-world physical deployment has been sorely lacking. That's where this workshop comes in.
 
-At the base, you have the foundation of this hybrid solution; **Azure Stack HCI**, the new purpose-built hyperconverged infrastructure operarting system from Microsoft, running on the enterprise-grade hardware platform from Dell Technologies, specifically, the **Dell Integrated System for Microsoft Azure Stack HCI**. This is managed through **Windows Admin Center**, which includes integration with **Dell OpenManage**, but in addition, there's growing integration with **Azure Arc** that you'll explore in this jumpstart. This hyperconverged solution is ideal for running traditional virtualized workloads, but in addition, virtual desktops, through integration with **Azure Virtual Desktop**.
+## How is this different to other environments and Jumpstarts?
 
-In addition to traditional virtualized workloads, more and more organizations are exploring ways to modernize their applications - Kubernetes is an increasingly popular way to do this, yet Kubernetes is complex....unless you're using **Azure Kubernetes Service (AKS) hybrid**. With AKS hybrid, you really do have the "easy button" to deploy and manage Kubernetes on your infrastructure, and in this jumpstart, you'll see that first hand.
+There are a number of different options out there to help build your knowledge. This includes [MSLab](https://github.com/microsoft/MSLab), written by my peer Jaromir Kaspar, which provides a plethora of options for deploying a variety of different configurations and scenarios around Azure Local and Windows Server. There's also the [Azure Arc Jumpstart](https://jumpstart.azure.com/azure_jumpstart_hcibox), which provides a complete, automated sandbox for exploring Azure Local capabilities and hybrid cloud integration in a virtual environment. So, what's so different about the Azure Local Deployment Workshop?
 
-Finally, through the power of **Azure Arc**, you're able to bring a number of Azure services down from Azure, to run on your Kubernetes cluster - from **Cognitive Services** and **Data Services**, through to the ever-popular **Azure App Service**, these services can now be run inside your own environments, and in this jumpstart, you'll learn how. 
+**The Azure Local Deployment Workshop:**
 
-This is just the start - we'll continue to grow this repository as more and more features and funcionality appear in the technologies, and as more compelling scenarios are designed and delivered.
+- Can run in nested in Azure, **and** can be deployed identically on-premises, either on a physical Windows Server/Client, or inside an existing VM on a virtualization platform of your choice. This saves you money, if you have existing equipment.
+- When running in Azure, the resources configured inside the VM, and the VM configurations themselves are **optimized to keep costs lower than alternative solutions**.
+- The deployment of the sandbox is **fully automated** - no need to download ISOs, executables, zip files etc - within a few simple PowerShell commands (or through an Azure ARM Template) you'll be ready to practice deployments.
+- The automation creates a sandbox to **more closely mimic real world deployments**, for example, when deploying a 4-machine Switchless Dual-Link configuration, should every Azure Local machine be able to communicate with every other machine over a generic switch configuration? NO! This workshop simulates real-world configurations, with isolated network paths and more, to ensure you can experience deployments the right way.
 
-### Jumpstart Modules
-This jumpstart takes a modular approach to education and experiences - it starts with a focus on the foundation of the hybrid offering, specifically Azure Stack HCI, before moving up the stack to cover solutions that focus more on your applications and workloads, including Kubernetes, Data services and PaaS platforms.
+### What's getting deployed?
 
-You are free to choose the modules that are most appropriate for your learning - for instance, after completing the initial Azure Stack HCI module, you could focus on a deeper experience with Azure Stack HCI, or alternatively, you could switch focus to containerization and explore the Kubernetes-focused modules. There's no right or wrong path!
+![Azure local Deployment Workshop Banner](media/AzureLocalDeploymentWorkshopArchitecture.png)
 
-After the **prerequsities** and **initial introductory** modules, the core focus will shift to Azure Stack HCI, including a number of hands-on exercises to help you experience the deployment and configuration of the solution.
+As you can see from the graphic, you'll **firstly need a Hyper-V host** - this could be:
 
-From there, you're free to focus on the modules that are most appropriate to your goals.
+- A physical machine that's running Windows 11 or Windows Server. In the case of Windows 11, it just needs to support Hyper-V - not all editions do, so please check!
+- A Windows Server 2022/2025 virtual machine on an existing hypervisor that supports nested virtualization
+- A Windows Server 2025 virtual machine running in Azure
 
-#### Module 1 - Introduction - The Hybrid Landscape
-In this module, we'll cover the hybrid landscape, why hybrid is so important to so many organizations, explore some of the core use cases and outline the overall hybrid solution from Dell Technologies and Microsoft.
+Don't worry about the details for now, I'll provide more details later.
 
-#### Module 2 - Hybrid Infrastructure with Azure Stack HCI & Azure Arc
-In this module, we'll dive deeper into Azure Stack HCI, including how it integrates with Dell OpenManage, and Azure. In addition, you'll explore a number of the core operations around Azure Stack HCI, including creating VMs, managing storage, networking, and integrating with a variety of Azure services. As part of this module, there are a number of hands-on-labs to explore the functionality of Azure Stack HCI.
+Once you have a host, the automation takes care of spinning up a custom sandbox environment, comprising of **1-4 nested Azure Local machines** (meaning, you can test all of the different architecture types across single-node, through non-and-fully-converged networks, plus switchless configurations), a **Domain Controller**, and optionally, a server running Windows Admin Center. This is pretty much everything you need to test Azure Local, and it'll be ready in about an hour.
 
-#### Module 3 - Modernizing hybrid apps with Kubernetes & Azure Arc
-We'll shift gears in this module, and start to focus more on applications, specifically, containerized applications. In this module, you'll explore AKS hybrid and learn first-hand how easy it is to deploy, and get up and running with your first containerized application. From there, you'll expore the Azure integration with Arc-enabled Kubernetes, GitOps, Azure Policy and more, all with hands-on-experience in the labs.
+## Is this workshop right for me?
 
-#### Module 4 - Modernizing hybrid apps with Azure Arc-enabled App Services
-With AKS hybrid deployed, we'll continue our focus on applications, this time, looking more deeply at the Azure App Service, which is also now Arc-enabled. You'll learn what Arc-enabled App Service is all about, and in addition, go through a deployment of the solution, as well as some sample applications.
-
-#### Module 5 - Modernizing hybrid apps with Azure Arc-enabled Data Services
-One of the most important aspects of any application, is how you manage it's data. In this module, you'll explore the key capabilities of Azure Arc-enabled data services and learn how they are delivered down to your on-premises infrastructure, to provide an Azure-consistent means to managing your data footprint.
-
-#### Module 6 - Embracing Cognitive Services with Azure Arc-enabled Machine Learning
-In this module, you'll learn just what Azure Arc-enabled Machine Learning is, and how to configure and use your Azure Arc-enabled Kubernetes cluster to train, inference, and manage machine learning models in Azure Machine Learning.
-
-#### Module 7 - Enhancing the hybrid workplace with Azure Virtual Desktop for Azure Stack HCI
-One of the newest additions to the hybrid portfolio is Azure Virtual Desktop for Azure Stack HCI. In this module, you'll get a solid grounding on Azure Virtual Desktop, before we move into the specifics when running on top of Azure Stack HCI - you'll learn about deployment and management of your virtual desktop environment, and understand how the solution helps you to meet your performance or data locality needs.
-
-### Is this jumpstart right for me?
-The goal of this jumpstart is to immerse you in the hybrid solutions from Dell Technolgies and Microsoft. As part of the jumpstart, you'll be exposed to a number of more technically complex features and functionality across a number of the solutions. This will involve hands-on time with both GUI and Console/PowerShell-based interfaces. With that in mind, this jumpstart is aimed at, but by no means limited to:
+The goal of this workshop is to immerse you in the deployment experience for Azure Local. As part of the workshop, you'll be exposed to a number of more technically complex features and functionality across a number of the key areas within the overall Azure Local deployment. This will involve hands-on time with both GUI and Console/PowerShell-based interfaces. With that in mind, this workshop is aimed at, but by no means limited to:
 
 - IT Professionals / Enthusiasts / Evangelists
 - Operations Teams
 - System / Infrastucture Administrators
 - Technical Pre-Sales Roles
+- System Integrators / Deployment Engineers
 
-With that said, one goal of the jumpstart is to ensure that the more complex elements are simplified for broader audiences, so even if your role and experience doesn't fit with those previously mentioned, give the jumpstart a try, and provide us feedback on how we can make it better for you!
+With that said, one goal of the workshop is to ensure that the more complex elements are simplified for broader audiences, so even if your role and experience doesn't fit with those previously mentioned, give the workshop a try, and provide us feedback on how we can make it better for you!
 
-### How much time do I need?
-Well, that depends :-) - The jumpstart is incredibly flexible, you can pick and choose the modules and hands-on-lab experiences that are most important for you. If you'd like to go deeper on the Azure Stack HCI specifics, focus your time and energy in that space, and there are several hours of content that can support your learning there. If you prefer to focus on the higher level app platforms and modernizing there, again, plenty of content is available for you to grow your skills.
+### How much time do I need
 
-If you wanted to walk through all the content and hands-on-labs, I'd **allocate at least one day** to walk through the different scenarios.
+Well, that depends :-) - The workshop is incredibly flexible, and you can start and stop to meet your needs, however, an end-to-end deployment of an Azure Local environment from start to finish, is likely to take a few hours to half a day, depending on the number of nodes you're planning to deploy within your sandbox environment.
 
-Getting Started
------------
-If you're ready to start your learning, head on over to the first module, to familiarize yourself with the hardware/software requirements for the jumpstart, and learn more about the tooling you'll use to deploy the solutions, most specifically, MSLab.
+## Getting Started
 
-**Head over to the [Hybrid Jumpstart | Infrastructure Prerequisites](/modules/module_0/1_infra_prerequisites.md)**
+If you're ready to start your learning, head on over to the first module, to familiarize yourself with the hardware/software requirements for the workshop, and learn more about the tooling you'll use to deploy the solutions.
 
-Raising issues
------------
-If you notice something is wrong with the jumpstart, such as a step isn't working, or something just doesn't make sense - help us to make this guide better!  [Raise an issue in GitHub](https://github.com/DellGEOS/HybridJumpstart/issues), and we'll be sure to fix this as quickly as possible!
+**Head over to the [Azure Local Deployment Workshop | Infrastructure Prerequisites](/modules/module_0/1_infra_prerequisites.md)**
 
-Contributions & Legal
------------
+## Raising issues
+
+If you notice something is wrong with the workshop, such as a step isn't working, or something just doesn't make sense - help us to make this guide better!  [Raise an issue in GitHub](https://github.com/DellGEOS/AzureLocalDeploymentWorkshop/issues), and we'll be sure to fix this as quickly as possible!
+
+## Contributions & Legal
+
 
 ### Contributing
+
 This project welcomes contributions and suggestions - if you have edits, or wish to provide feedback, please feel free to do so - we'll incorporate any changes that can improve the overall experience for all users! Make sure you read the [contributing guidance](.github/CONTRIBUTING.md) before submitting!
 
 ### Legal Notices
 
 You are granted a license to the content in this repository under the [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0), see the [LICENSE](LICENSE) file.
 
-Dell Technologies, Dell and other trademarks referenced in the jumpstart guidance are trademarks of Dell Inc. or its subsidiaries.
+Dell Technologies, Dell and other trademarks referenced in the workshop guidance are trademarks of Dell Inc. or its subsidiaries.
 
-Microsoft, Windows, Microsoft Azure and/or other Microsoft products and services referenced in the jumpstart guidance may be either trademarks or registered trademarks of Microsoft in the United States and/or other countries.
+Microsoft, Windows, Microsoft Azure and/or other Microsoft products and services referenced in the workshop guidance may be either trademarks or registered trademarks of Microsoft in the United States and/or other countries.
 
 The licenses for this project do not grant you rights to use any Microsoft or Dell Inc. names, logos, or trademarks. The respective trademark guidelines are available online for [Dell Inc.](https://www.dell.com/learn/us/en/uscorp1/terms-conditions/trademarks-us) and [Microsoft](http://go.microsoft.com/fwlink/?LinkID=254653).
 
-Dell Technologies Privacy information can be found at https://www.dell.com/en-us/lp/privacy-center.
+Dell Technologies Privacy information can be found at <https://www.dell.com/en-us/lp/privacy-center>.
 
-Microsoft Privacy information can be found at https://privacy.microsoft.com/en-us/
+Microsoft Privacy information can be found at <https://privacy.microsoft.com/en-us/>
 
 Dell Technologies, Microsoft and any contributors reserve all other rights, whether under their respective copyrights, patents, or trademarks, whether by implication, estoppel or otherwise.
