@@ -14,7 +14,7 @@ Since the transition from Azure Stack HCI 22H2, to 23H2, and the evolution to Az
 
 There are a number of different options out there to help build your knowledge. This includes [MSLab](https://github.com/microsoft/MSLab), written by my peer Jaromir Kaspar, which provides a plethora of options for deploying a variety of different configurations and scenarios around Azure Local and Windows Server.
 
-There's also the [Azure Arc Jumpstart](https://jumpstart.azure.com/azure_jumpstart_hcibox), which provides a complete, automated sandbox for exploring Azure Local capabilities and hybrid cloud integration in a virtual environment.
+There's also the [Azure Arc Jumpstart](https://jumpstart.azure.com/azure_jumpstart_hcibox), which provides a complete, automated sandbox for exploring Azure Local capabilities and hybrid cloud integration in a virtual environment, running in Azure.
 
 So, what's so different about the Azure Local Deployment Workshop?
 
