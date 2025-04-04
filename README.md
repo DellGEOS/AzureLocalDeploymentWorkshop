@@ -4,7 +4,7 @@
 
 ## Welcome to the Azure Local Deployment Workshop
 
-Written by me, Matt McSpirit, Microsoft Azure MVP and Engineering Technologist at Dell Technologies, the goal of this workshop is simple; to help you grow your knowledge, skills and experience around preparing for, and subsequently deploying Azure Local.
+Written by me, Matt McSpirit, Microsoft Azure MVP and Engineering Technologist at Dell Technologies, the goal of this workshop is simple; to **help you grow your knowledge, skills and experience around preparing for, and subsequently deploying Azure Local**.
 
 ## About the workshop
 
@@ -12,16 +12,22 @@ Since the transition from Azure Stack HCI 22H2, to 23H2, and the evolution to Az
 
 ## How is this different to other environments and Jumpstarts?
 
-There are a number of different options out there to help build your knowledge. This includes [MSLab](https://github.com/microsoft/MSLab), written by my peer Jaromir Kaspar, which provides a plethora of options for deploying a variety of different configurations and scenarios around Azure Local and Windows Server. There's also the [Azure Arc Jumpstart](https://jumpstart.azure.com/azure_jumpstart_hcibox), which provides a complete, automated sandbox for exploring Azure Local capabilities and hybrid cloud integration in a virtual environment. So, what's so different about the Azure Local Deployment Workshop?
+There are a number of different options out there to help build your knowledge. This includes [MSLab](https://github.com/microsoft/MSLab), written by my peer Jaromir Kaspar, which provides a plethora of options for deploying a variety of different configurations and scenarios around Azure Local and Windows Server. 
+
+There's also the [Azure Arc Jumpstart](https://jumpstart.azure.com/azure_jumpstart_hcibox), which provides a complete, automated sandbox for exploring Azure Local capabilities and hybrid cloud integration in a virtual environment.
+
+So, what's so different about the Azure Local Deployment Workshop?
 
 **The Azure Local Deployment Workshop:**
 
-- Can run in nested in Azure, **and** can be deployed identically on-premises, either on a physical Windows Server/Client, or inside an existing VM on a virtualization platform of your choice. This saves you money, if you have existing equipment.
+- Can run in nested in Azure **and** can be deployed identically on-premises, either on a physical Windows Server/Client, or inside an existing VM on a virtualization platform of your choice. This saves you money, if you have existing equipment.
 - When running in Azure, the resources configured inside the VM, and the VM configurations themselves are **optimized to keep costs lower than alternative solutions**.
 - The deployment of the sandbox is **fully automated** - no need to download ISOs, executables, zip files etc - within a few simple PowerShell commands (or through an Azure ARM Template) you'll be ready to practice deployments.
 - The automation creates a sandbox to **more closely mimic real world deployments**, for example, when deploying a 4-machine Switchless Dual-Link configuration, should every Azure Local machine be able to communicate with every other machine over a generic switch configuration? NO! This workshop simulates real-world configurations, with isolated network paths and more, to ensure you can experience deployments the right way.
 
 ### What's getting deployed?
+
+Take a look at this graphic, which depicts a generic deployment of the sandbox:
 
 ![Azure local Deployment Workshop Banner](media/AzureLocalDeploymentWorkshopArchitecture.png)
 
@@ -34,6 +40,11 @@ As you can see from the graphic, you'll **firstly need a Hyper-V host** - this c
 Don't worry about the details for now, I'll provide more details later.
 
 Once you have a host, the automation takes care of spinning up a custom sandbox environment, comprising of **1-4 nested Azure Local machines** (meaning, you can test all of the different architecture types across single-node, through non-and-fully-converged networks, plus switchless configurations), a **Domain Controller**, and optionally, a server running Windows Admin Center. This is pretty much everything you need to test Azure Local, and it'll be ready in about an hour.
+
+### What's NOT getting deployed?
+The goal of this workshop is to help you learn how to deploy the Azure Local instance, configuring your machines, networks and more along the way. So, you're not getting a completed deployment once the automation has finished! What would you learn from that? if that's your goal, to have a completed instance once the automation has finished, then the [Azure Arc Jumpstart](https://jumpstart.azure.com/azure_jumpstart_hcibox) is a better fit.
+
+If you want to experience **actual deployments of Azure Local instances**, read on....
 
 ## Is this workshop right for me?
 
