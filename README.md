@@ -10,7 +10,7 @@ The goal of the Azure Local Deployment Workshop is simple; to **help you grow yo
 
 ## About the workshop
 
-Since the transition from Azure Stack HCI 22H2, to 23H2, and the evolution to Azure Local, the overall solution has grown in complexity - firewall and outbound connectvity, identity integration, Azure permissions, network configuration and more, and whilst the documentation is improving, the availability of a fast-to-deploy sandbox environment with accompanying documentation, that can be used to accurately mimic a real-world physical deployment has been sorely lacking. That's where this workshop comes in.
+Since the transition from Azure Stack HCI 22H2, to 23H2, and the evolution to Azure Local, the overall solution has grown in complexity - firewall and outbound connectivity, identity integration, Azure permissions, network configuration and more, and whilst the documentation is improving, the availability of a fast-to-deploy sandbox environment with accompanying documentation, that can be used to accurately mimic a real-world physical deployment has been sorely lacking. That's where this workshop comes in.
 
 ## How is this different to other environments and jumpstarts?
 
@@ -55,7 +55,7 @@ The goal of this workshop is to immerse you in the deployment experience for Azu
 
 - IT Professionals / Enthusiasts / Evangelists
 - Operations Teams
-- System / Infrastucture Administrators
+- System / Infrastructure Administrators
 - Technical Pre-Sales Roles
 - System Integrators / Deployment Engineers
 

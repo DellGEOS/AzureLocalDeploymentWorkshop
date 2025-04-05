@@ -27,7 +27,7 @@ The workshop is broken down into a number of modules and sub-modules that delve 
 
 Within each module, you'll find a mix of video presentation to add extra context, alongside hands-on-lab guidance to help provide a guided and consistent way to experience the solutions first-hand.
 
-In order to participate in the hands-on-labs, and follow along with the guided instructions in the workshop, you'll need an environment where you can deploy the virtualized infrastucture and hybrid workloads. For this, **you have a couple of options**:
+In order to participate in the hands-on-labs, and follow along with the guided instructions in the workshop, you'll need an environment where you can deploy the virtualized infrastructure and hybrid workloads. For this, **you have a couple of options**:
 
 - Single physical server/desktop/laptop with appropriate resources
 - Single virtual machine on an existing virtualization platform that supports nested virtualization and Windows Server as a guest operating system.
@@ -122,7 +122,7 @@ With the OS updated, and back online after any required reboot, you're now ready
 
 ## Option 2 - Lab Deployment in existing virtual machine
 
-In this section, we'll cover the high-level guidance for deploying the Azure Local Deployment Workshop inside a new/existing virtual machine, running on an alternative virtualization platform such as VMware vSphere, VMware Workstation, Nutanix, Proxmox etc. 
+In this section, we'll cover the high-level guidance for deploying the Azure Local Deployment Workshop inside a new/existing virtual machine, running on an alternative virtualization platform such as VMware vSphere, VMware Workstation, Nutanix, Proxmox etc.
 
 Regardless of which virtualization platform you have available, at a high-level, you'll need to create a virtual machine with the following characteristics:
 
@@ -159,4 +159,4 @@ Head over to review the **[Azure Local Deployment Workshop | Azure Prerequisites
 
 ## Raising issues
 
-If you notice something is wrong with the workshop, such as a step isn't working, or something just doesn't make sense - help us to make this guide better!  [Raise an issue in GitHub](https://github.com/DellGEOS/AzureLocalDeploymentWorkshop/issues), and we'll be sure to fix this as quickly as possible!
+If you notice something is wrong with the Azure Local Deployment Workshop, such as a step isn't working, or something just doesn't make sense - help us to make this guide better!  [Raise an issue in GitHub](https://github.com/DellGEOS/AzureLocalDeploymentWorkshop/issues), and we'll be sure to fix this as quickly as possible!
