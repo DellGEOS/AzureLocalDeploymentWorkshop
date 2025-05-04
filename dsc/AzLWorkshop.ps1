@@ -182,7 +182,7 @@ configuration AzLWorkshop
                 return @{ 'Result' = $result }
             }
             SetScript  = {
-                Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -
+                Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
             }
             TestScript = {
                 $state = [scriptblock]::Create($GetScript).Invoke()
@@ -232,7 +232,7 @@ configuration AzLWorkshop
             }
         }
         
-        # Install the Evergreen module to allow for Edge to be installed later
+        <# Install the Evergreen module to allow for Edge to be installed later
         Script "InstallEvergreen" {
             GetScript  = {
                 # Check if the Evergreen module exists and is not equal to null or empty
@@ -247,6 +247,7 @@ configuration AzLWorkshop
                 return $state.Result
             }
         }
+            #>
 
         # If this is in Azure, configure Storage Spaces Direct and then create the required folders
         if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
@@ -1009,6 +1010,7 @@ configuration AzLWorkshop
                     # Trigger an explorer restart to apply the wallpaper
                     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
                     Start-Sleep -Seconds 5
+                    <#
                     # Find the latest path to current Microsoft Edge Binaries
                     # First, import the Evergreen module
                     Import-Module Evergreen -ErrorAction Stop
@@ -1027,6 +1029,7 @@ configuration AzLWorkshop
                     # Install the file using msiexec
                     Write-Host "Installing Microsoft Edge Enterprise..."
                     Start-Process msiexec.exe -ArgumentList "/i $edgePath /quiet /norestart" -Wait -NoNewWindow
+                    #>
                 }
             }
             TestScript = {
