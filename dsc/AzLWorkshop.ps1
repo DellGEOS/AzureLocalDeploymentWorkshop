@@ -235,7 +235,8 @@ configuration AzLWorkshop
         # Install the Evergreen module to allow for Edge to be installed later
         Script "InstallEvergreen" {
             GetScript  = {
-                $result = (Get-Module -Name Evergreen).Name -eq 'Evergreen'
+                # Check if the Evergreen module exists and is not equal to null or empty
+                $result = (Get-Module -Name Evergreen -ListAvailable).Name -eq 'Evergreen'
                 return @{ 'Result' = $result }
             }
             SetScript  = {
@@ -1009,6 +1010,8 @@ configuration AzLWorkshop
                     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
                     Start-Sleep -Seconds 5
                     # Find the latest path to current Microsoft Edge Binaries
+                    # First, import the Evergreen module
+                    Import-Module Evergreen -ErrorAction Stop
                     $edgeURI = (Get-EvergreenApp -Name MicrosoftEdge | `
                             Where-Object { $_.Architecture -eq "x64" -and $_.Channel -eq "Stable" -and $_.Release -eq "Enterprise" }).URI
                     # Download the file using bits transfer if the file doesn't already exist
