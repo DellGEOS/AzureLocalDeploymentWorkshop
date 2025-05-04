@@ -175,6 +175,78 @@ configuration AzLWorkshop
             $azLocalISOLocalPath = "$azLocalIsoPath\AzureLocal.iso"
         }
 
+        # Set the PS gallery as trusted to allow for DSC module installation
+        Script "SetPSGalleryTrusted" {
+            GetScript  = {
+                $result = (Get-PSRepository -Name PSGallery).InstallationPolicy -eq 'Trusted'
+                return @{ 'Result' = $result }
+            }
+            SetScript  = {
+                Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -
+            }
+            TestScript = {
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
+            }
+        }
+        
+        # Ensure that nuget is installed for the PSGallery to work properly
+        Script "InstallNuget" {
+            GetScript  = {
+                $result = (Get-PackageProvider -Name NuGet -ForceBootstrap).Name -eq 'NuGet'
+                return @{ 'Result' = $result }
+            }
+            SetScript  = {
+                Install-PackageProvider -Name NuGet -ForceBootstrap
+            }
+            TestScript = {
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
+            }
+        }
+
+        # Install the PowerShellGet package provider over the top of the default version 1.0.0.1 to allow for the Evergreen module to be installed
+        Script "InstallPowerShellGet" {
+            GetScript  = {
+                $installedVersion = (Get-PackageProvider -Name PowerShellGet -ErrorAction SilentlyContinue).Version
+                $result = $installedVersion -and ($installedVersion -ne '1.0.0.1')
+                return @{ 'Result' = $result }
+            }
+            SetScript  = {
+                $installedVersion = (Get-PackageProvider -Name PowerShellGet -ErrorAction SilentlyContinue).Version
+                if ($installedVersion -eq '1.0.0.1') {
+                    Write-Host "PowerShellGet version is 1.0.0.1. Installing the latest version..."
+                    Install-PackageProvider -Name PowerShellGet -Force
+                    # Reload the module to ensure the latest version is used
+                    Remove-Module PowerShellGet -Force
+                    Import-Module PowerShellGet -Force
+                    Write-Host "PowerShellGet has been updated to the latest version."
+                }
+                else {
+                    Write-Host "PowerShellGet is already up-to-date."
+                }
+            }
+            TestScript = {
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
+            }
+        }
+        
+        # Install the Evergreen module to allow for Edge to be installed later
+        Script "InstallEvergreen" {
+            GetScript  = {
+                $result = (Get-Module -Name Evergreen).Name -eq 'Evergreen'
+                return @{ 'Result' = $result }
+            }
+            SetScript  = {
+                Install-Module -Name Evergreen -Force
+            }
+            TestScript = {
+                $state = [scriptblock]::Create($GetScript).Invoke()
+                return $state.Result
+            }
+        }
+
         # If this is in Azure, configure Storage Spaces Direct and then create the required folders
         if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
 
@@ -936,10 +1008,6 @@ configuration AzLWorkshop
                     # Trigger an explorer restart to apply the wallpaper
                     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
                     Start-Sleep -Seconds 5
-                    # Install required PS Modules
-                    Write-Host "Installing required PowerShell modules to ease updating of Microsoft Edge..."
-                    Install-PackageProvider PowerShellGet -Force
-                    Install-Module Evergreen -Force
                     # Find the latest path to current Microsoft Edge Binaries
                     $edgeURI = (Get-EvergreenApp -Name MicrosoftEdge | `
                             Where-Object { $_.Architecture -eq "x64" -and $_.Channel -eq "Stable" -and $_.Release -eq "Enterprise" }).URI
