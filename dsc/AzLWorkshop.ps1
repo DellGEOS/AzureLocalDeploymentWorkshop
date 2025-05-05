@@ -485,7 +485,8 @@ configuration AzLWorkshop
             }
             SetScript  = {
                 $ProgressPreference = 'SilentlyContinue'
-                Start-BitsTransfer -Source $Using:wsIsoUri -Destination $Using:wsISOLocalPath   
+                $client = New-Object System.Net.WebClient
+                $client.DownloadFile("$Using:wsIsoUri", "$Using:wsISOLocalPath  ")
             }
             TestScript = {
                 $state = [scriptblock]::Create($GetScript).Invoke()
@@ -502,10 +503,10 @@ configuration AzLWorkshop
             }
             SetScript  = {
                 $ProgressPreference = 'SilentlyContinue'
-                Start-BitsTransfer -Source $Using:azureLocalIsoUri -Destination $Using:azLocalISOLocalPath            
+                $client = New-Object System.Net.WebClient
+                $client.DownloadFile("$Using:azureLocalIsoUri", "$Using:azLocalISOLocalPath")    
             }
             TestScript = {
-                
                 $state = [scriptblock]::Create($GetScript).Invoke()
                 return $state.Result
             }
@@ -671,7 +672,7 @@ configuration AzLWorkshop
 
         # Enable and configure Hyper-V
         $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
-
+        <#
         # First, check if $osInfo.BuildNumber is greater than or equal to 26100 and $osInfo.ProductType -eq 3
         if ($osInfo.BuildNumber -ge 26100 -and $osInfo.ProductType -eq 3) {
             WindowsOptionalFeature "Hyper-V" {
@@ -684,8 +685,9 @@ configuration AzLWorkshop
                 DependsOn                 = "[WindowsOptionalFeature]Hyper-V"
             }
         }
+        #>
         # Catch for Windows Server OS 2022
-        elseif ($osInfo.ProductType -eq 3) {
+        if ($osInfo.ProductType -eq 3) {
             WindowsFeature "Hyper-V" {
                 Name   = "Hyper-V"
                 Ensure = "Present"
@@ -1020,8 +1022,9 @@ configuration AzLWorkshop
                     $edgePath = "C:\MicrosoftEdgeEnterpriseX64.msi"
                     if (!(Test-Path -Path "$edgePath")) {
                         Write-Host "Downloading latest Microsoft Edge Enterprise MSI..."
-                        $ProgressPreference = 'SilentlyContinue'   
-                        Start-BitsTransfer -Source $edgeURI -Destination $edgePath -ErrorAction SilentlyContinue
+                        $ProgressPreference = 'SilentlyContinue'
+                        $client = New-Object System.Net.WebClient
+                        $client.DownloadFile("$edgeURI", "$edgePath")
                     }
                     else {
                         Write-Host "Microsoft Edge Enterprise MSI already exists. Skipping download."
