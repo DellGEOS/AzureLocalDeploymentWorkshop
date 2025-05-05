@@ -626,20 +626,6 @@ configuration AzLWorkshop
 
         # Enable and configure Hyper-V
         $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
-        <#
-        # First, check if $osInfo.BuildNumber is greater than or equal to 26100 and $osInfo.ProductType -eq 3
-        if ($osInfo.BuildNumber -ge 26100 -and $osInfo.ProductType -eq 3) {
-            WindowsOptionalFeature "Hyper-V" {
-                Name   = "Microsoft-Hyper-V"
-                Ensure = "Enable"
-            }
-            VMHost "ConfigureHyper-V" {
-                IsSingleInstance          = 'yes'
-                EnableEnhancedSessionMode = $true
-                DependsOn                 = "[WindowsOptionalFeature]Hyper-V"
-            }
-        }
-        #>
         # Catch for Windows Server OS 2022
         if ($osInfo.ProductType -eq 3) {
             WindowsFeature "Hyper-V" {
@@ -966,6 +952,7 @@ configuration AzLWorkshop
                     # Trigger an explorer restart to apply the wallpaper
                     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
                     Start-Sleep -Seconds 5
+                    <#
                     # Find the latest path to current Microsoft Edge Binaries
                     $edgeURI = (Get-EvergreenApp -Name MicrosoftEdge | `
                             Where-Object { $_.Architecture -eq "x64" -and $_.Channel -eq "Stable" -and $_.Release -eq "Enterprise" }).URI

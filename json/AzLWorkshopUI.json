@@ -292,7 +292,7 @@
                                     "type": "Microsoft.Common.TextBlock",
                                     "visible": true,
                                     "options": {
-                                        "text": "The Azure Local Host VM runs the latest Windows Server 2025 Datacenter: Azure Edition."
+                                        "text": "The Azure Local Host VM runs Windows Server 2025 Datacenter."
                                     }
                                 },
                                 {
