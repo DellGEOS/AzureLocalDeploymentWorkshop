@@ -44,6 +44,20 @@ configuration AzLWorkshop
             ConfigurationMode  = 'ApplyOnly'
         }
 
+        # Set up logging for the DSC configuration
+        File "LogFolder" {
+            Type            = 'Directory'
+            DestinationPath = "C:\AzLWorkshopLogs"
+            Ensure          = 'Present'
+        }
+
+        try { Stop-Transcript | Out-Null } catch { }
+
+        $runTime = $(Get-Date).ToString("MMddyy-HHmmss")
+        $fullLogPath = "C:\AzLWorkshopLogs\AzLWorkshopLog_$runTime.txt"
+        Write-Host "`nLog folder full path is $fullLogPath"
+        Start-Transcript -Path "$fullLogPath" -Append
+
         # Set the external endpoints for downloads
         [String]$mslabUri = "https://aka.ms/mslab/download"
         [String]$wsIsoUri = "https://go.microsoft.com/fwlink/p/?LinkID=2195280" # Windows Server 2022
@@ -1704,5 +1718,6 @@ configuration AzLWorkshop
                 DependsOn  = "[Script]Edit RDP File"
             }
         }
+        try { Stop-Transcript | Out-Null } catch { }
     }
 }
