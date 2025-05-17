@@ -66,9 +66,9 @@ configuration AzLWorkshop
 
             $startTime = $(Get-Date).ToString("MMddyy-HHmmss")
             $fullLogPath = "C:\AzLWorkshopLogs\AzLWorkshopLog_$startTime.txt"
+            Start-Transcript -Path "$fullLogPath" -Append -IncludeInvocationHeader
             Write-Verbose "Log folder full path is $fullLogPath" -Verbose
             Write-Verbose "Starting AzLWorkshop configuration at $startTime" -Verbose
-            Start-Transcript -Path "$fullLogPath" -Append -IncludeInvocationHeader
 
             #######################################################################
             ## Setup external endpoints for downloads
@@ -981,12 +981,19 @@ configuration AzLWorkshop
                         # Disable Server Manager WAC Prompt
                         Write-Verbose "Disabling Server Manager WAC Prompt." -Verbose
                         Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\ServerManager' -Name 'DoNotPopWACConsoleAtSMLaunch' -Value 1 -Type Dword
+                        # Disable Server Manager from starting on boot
+                        Write-Verbose "Disable Server Manager from starting on boot" -Verbose
+                        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\ServerManager" -Name "DoNotOpenServerManagerAtLogon" -Value 1 -Type Dword
                         # Disable Network Profile Prompt
                         Write-Verbose "Disabling Network Profile Prompt." -Verbose
                         New-Item -Path 'HKLM:\System\CurrentControlSet\Control\Network\NewNetworkWindowOff' -Force | Out-Null
                         # Create Shortcut for Hyper-V Manager
+                        Write-Verbose "Installing Hyper-V RSAT Tools" -Verbose
+                        Install-WindowsFeature -Name RSAT-Hyper-V-Tools -IncludeAllSubFeature -IncludeManagementTools
                         Write-Verbose "Creating Shortcut for Hyper-V Manager" -Verbose
                         Copy-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Hyper-V Manager.lnk" -Destination "C:\Users\Public\Desktop" -Force
+                        Write-Verbose "Installing Failover Clustering RSAT Tools" -Verbose
+                        Install-WindowsFeature -Name  RSAT-Clustering-Mgmt, RSAT-Clustering-PowerShell -IncludeAllSubFeature -IncludeManagementTools
                         # Create Shortcut for Failover-Cluster Manager
                         Write-Verbose "Creating Shortcut for Failover-Cluster Manager" -Verbose
                         Copy-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Failover Cluster Manager.lnk" -Destination "C:\Users\Public\Desktop" -Force
@@ -1848,6 +1855,14 @@ configuration AzLWorkshop
         }
         catch {
             Write-Verbose "An error has occured during the installation process." -Verbose
+            Write-Verbose "Generating log files and storing them in C:\AzLWorkshopLogs" -Verbose
+            # Need to find latest JSON file and convert to log file
+            $jsonFiles = Get-ChildItem -Path "C:\Windows\system32\configuration\configurationstatus\*.json"
+            foreach ($jsonFile in $jsonFiles) {
+                # Copy the JSON file to the AzLWorkshopLogs folder
+                Write-Verbose "Copying JSON file: $($jsonFile.FullName) to C:\AzLWorkshopLogs\$($jsonFile.Name)" -Verbose
+                Copy-Item -Path $jsonFile.FullName -Destination "C:\AzLWorkshopLogs\$($jsonFile.Name)" -Force
+            }
             Write-Verbose "Message => $_`n" -Verbose
         }
         finally {
