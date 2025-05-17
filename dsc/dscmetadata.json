@@ -5,7 +5,6 @@
         "ComputerManagementDsc",
         "HyperVDsc",
         "MSCatalogLTS",
-        "Hyper-ConvertImage",
-        "PackageManagement"
+        "Hyper-ConvertImage"
     ]
 }
