@@ -24,7 +24,8 @@ configuration AzLWorkshop
         [String]$workshopPath,
         [String]$WindowsServerIsoPath,
         [String]$AzureLocalIsoPath,
-        [String]$customDNSForwarders
+        [String]$customDNSForwarders,
+        [String]$deploymentPrefix
     )
     
     Import-DscResource -ModuleName 'ComputerManagementDsc' -ModuleVersion 10.0.0
@@ -54,10 +55,17 @@ configuration AzLWorkshop
         try {
 
             # Set up logging for the DSC configuration
-            File "LogFolder" {
+            File "TopLevelLogFolder" {
                 Type            = 'Directory'
                 DestinationPath = "C:\AzLWorkshopLogs"
                 Ensure          = 'Present'
+            }
+
+            File "DeploymentLogFolder" {
+                Type            = 'Directory'
+                DestinationPath = "C:\AzLWorkshopLogs\$deploymentPrefix"
+                Ensure          = 'Present'
+                DependsOn       = "[File]TopLevelLogFolder"
             }
 
             #######################################################################
@@ -65,7 +73,7 @@ configuration AzLWorkshop
             #######################################################################
 
             $startTime = $(Get-Date).ToString("MMddyy-HHmmss")
-            $fullLogPath = "C:\AzLWorkshopLogs\AzLWorkshopLog_$startTime.txt"
+            $fullLogPath = "C:\AzLWorkshopLogs\$deploymentPrefix\AzLWorkshopLog_$startTime.txt"
             Start-Transcript -Path "$fullLogPath" -Append -IncludeInvocationHeader
             Write-Verbose "Log folder full path is $fullLogPath" -Verbose
             Write-Verbose "Starting AzLWorkshop configuration at $startTime" -Verbose
@@ -166,17 +174,19 @@ configuration AzLWorkshop
             ## Define variables for the workshop
             #######################################################################
 
-            $vmPrefix = (Get-Date -UFormat %d%b%y).ToUpper() # Set based on current date
+            $vmPrefix = $deploymentPrefix
             $vSwitchName = if ($azureLocalArchitecture -like "*Fully-Converged*") { "Mgmt_Compute_Stor" } else { "Mgmt_Compute" } # Set based on architecture
             $allowedVlans = if ($azureLocalArchitecture -like "*Fully-Converged*") { "1-10,711-719" } else { "1-10" } # Set based on architecture
 
             # Set the workshop path based on the current machine - If this is running in Azure, set the workshop path to V:\AzLWorkshop
             if ((Get-CimInstance win32_systemenclosure).SMBIOSAssetTag -eq "7783-7084-3265-9085-8269-3286-77") {
                 $targetDrive = "V"
-                $workshopPath = "$targetDrive" + ":\AzLWorkshop"
+                $workshopTopLevelPath = "$targetDrive" + ":\AzLWorkshop"
+                $workshopPath = "$workshopTopLevelPath" + "\$($deploymentPrefix)"
             }
             else {
-                $workshopPath = "$workshopPath" + "\AzLWorkshop"
+                $workshopTopLevelPath = "$workshopPath" + "\AzLWorkshop"
+                $workshopPath = "$workshopTopLevelPath" + "\$($deploymentPrefix)"
             }
 
             # Set the paths for the workshop
@@ -304,19 +314,29 @@ configuration AzLWorkshop
                     DependsOn  = "[Script]VirtualDisk"
                 }
 
-                Write-Verbose "Creating Workshop folder" -Verbose
+                Write-Verbose "Creating Workshop folder and subdirectory" -Verbose
+                File "WorkshopTopLevelFolder" {
+                    Type            = 'Directory'
+                    DestinationPath = $workshopTopLevelPath
+                    DependsOn       = "[Script]FormatDisk"
+                }
                 File "WorkshopFolder" {
                     Type            = 'Directory'
                     DestinationPath = $workshopPath
-                    DependsOn       = "[Script]FormatDisk"
+                    DependsOn       = "[File]WorkshopTopLevelFolder"
                 }
             }
             else {
                 # Running on-prem, outside of Azure
-                Write-Verbose "Creating Workshop folder" -Verbose
+                Write-Verbose "Creating Workshop folder and subdirectory" -Verbose
+                File "WorkshopTopLevelFolder" {
+                    Type            = 'Directory'
+                    DestinationPath = $workshopTopLevelPath
+                }
                 File "WorkshopFolder" {
                     Type            = 'Directory'
                     DestinationPath = $workshopPath
+                    DependsOn       = "[File]WorkshopTopLevelFolder"
                 }
             }
 
@@ -1050,7 +1070,7 @@ configuration AzLWorkshop
             if ($azureLocalArchitecture -like "*Non-Converged") {
                 Write-Verbose "Architecture = $azureLocalArchitecture. Creating single vSwitch for storage, and VM vNICs" -Verbose
                 VMSwitch "NonConvergedSwitch" {
-                    Name      = "Storage"
+                    Name      = "$vmPrefix-Storage"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
@@ -1064,7 +1084,7 @@ configuration AzLWorkshop
                         Id         = "$vm-Storage1-NIC"
                         VMName     = "$vmPrefix-$vm"
                         Name       = "Storage1"
-                        SwitchName = "Storage"
+                        SwitchName = "$vmPrefix-Storage"
                         Ensure     = "Present"
                         DependsOn  = "[VMSwitch]NonConvergedSwitch"
                     }
@@ -1072,7 +1092,7 @@ configuration AzLWorkshop
                         Id         = "$vm-Storage2-NIC"
                         VMName     = "$vmPrefix-$vm"
                         Name       = "Storage2"
-                        SwitchName = "Storage"
+                        SwitchName = "$vmPrefix-Storage"
                         Ensure     = "Present"
                         DependsOn  = "[VMSwitch]NonConvergedSwitch"
                     }
@@ -1081,14 +1101,14 @@ configuration AzLWorkshop
             elseif ($azureLocalArchitecture -eq "2-Machine Switchless Dual-Link") {
                 Write-Verbose "Architecture = $azureLocalArchitecture. Creating 2 private vSwitches and VM vNICs" -Verbose
                 VMSwitch "CreateStorageSwitch1-2" {
-                    Name      = "Storage1-2"
+                    Name      = "$vmPrefix-Storage1-2"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch2-1" {
-                    Name      = "Storage2-1"
+                    Name      = "$vmPrefix-Storage2-1"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
@@ -1100,7 +1120,7 @@ configuration AzLWorkshop
                         Id         = "$vm-Storage1-2-NIC"
                         VMName     = "$vmPrefix-$vm"
                         Name       = "Storage1-2"
-                        SwitchName = "Storage1-2"
+                        SwitchName = "$vmPrefix-Storage1-2"
                         Ensure     = "Present"
                         DependsOn  = "[VMSwitch]CreateStorageSwitch1-2"
                     }
@@ -1108,7 +1128,7 @@ configuration AzLWorkshop
                         Id         = "$vm-Storage2-1-NIC"
                         VMName     = "$vmPrefix-$vm"
                         Name       = "Storage2-1"
-                        SwitchName = "Storage2-1"
+                        SwitchName = "$vmPrefix-Storage2-1"
                         Ensure     = "Present"
                         DependsOn  = "[VMSwitch]CreateStorageSwitch2-1"
                     }
@@ -1120,21 +1140,21 @@ configuration AzLWorkshop
                 # Create 1 vSwitch per VM named "Storage" plus the Number of the 2 nodes that it will connect between (e.g. Storage1-2)
                 Write-Verbose "Architecture = $azureLocalArchitecture. Creating 3 private vSwitches and VM vNICs" -Verbose
                 VMSwitch "CreateStorageSwitch1-2" {
-                    Name      = "Storage1-2"
+                    Name      = "$vmPrefix-Storage1-2"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch2-3" {
-                    Name      = "Storage2-3"
+                    Name      = "$vmPrefix-Storage2-3"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch1-3" {
-                    Name      = "Storage1-3"
+                    Name      = "$vmPrefix-Storage1-3"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
@@ -1154,8 +1174,8 @@ configuration AzLWorkshop
                         VMNetworkAdapter "AzL$machine$($nic)" {
                             Id         = "AzL$machine-$nic-NIC"
                             VMName     = "$vmPrefix-AzL$machine"
-                            Name       = $nic
-                            SwitchName = $nic
+                            Name       = "$nic"
+                            SwitchName = "$vmPrefix-$nic"
                             Ensure     = "Present"
                             DependsOn  = "[VMSwitch]CreateStorageSwitch1-2", "[VMSwitch]CreateStorageSwitch2-3", "[VMSwitch]CreateStorageSwitch1-3"
                         }
@@ -1168,42 +1188,42 @@ configuration AzLWorkshop
                 # Create 6 private vSwitches named "Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2", "Storage1-3", and "Storage3-1"
                 Write-Verbose "Architecture = $azureLocalArchitecture. Creating 6 private vSwitches and VM vNICs" -Verbose
                 VMSwitch "CreateStorageSwitch1-2" {
-                    Name      = "Storage1-2"
+                    Name      = "$vmPrefix-Storage1-2"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch2-1" {
-                    Name      = "Storage2-1"
+                    Name      = "$vmPrefix-Storage2-1"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch2-3" {
-                    Name      = "Storage2-3"
+                    Name      = "$vmPrefix-Storage2-3"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch3-2" {
-                    Name      = "Storage3-2"
+                    Name      = "$vmPrefix-Storage3-2"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch1-3" {
-                    Name      = "Storage1-3"
+                    Name      = "$vmPrefix-Storage1-3"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch3-1" {
-                    Name      = "Storage3-1"
+                    Name      = "$vmPrefix-Storage3-1"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
@@ -1222,8 +1242,8 @@ configuration AzLWorkshop
                         VMNetworkAdapter "AzL$($machine.VM)$($nicName)" {
                             Id         = "$vmPrefix-AzL$($machine.VM)-$nicName-NIC"
                             VMName     = "$vmPrefix-AzL$($machine.VM)"
-                            Name       = $nicName
-                            SwitchName = $nicName
+                            Name       = "$nicName"
+                            SwitchName = "$vmPrefix-$nicName"
                             Ensure     = "Present"
                             DependsOn  = "[VMSwitch]CreateStorageSwitch1-2", "[VMSwitch]CreateStorageSwitch2-1", "[VMSwitch]CreateStorageSwitch2-3", "[VMSwitch]CreateStorageSwitch3-2", "[VMSwitch]CreateStorageSwitch1-3", "[VMSwitch]CreateStorageSwitch3-1"
                         }
@@ -1236,84 +1256,84 @@ configuration AzLWorkshop
                 # Create 12 private vSwitches named "Storage1-2", "Storage2-1", "Storage2-3", "Storage3-2", "Storage1-3", "Storage3-1", "Storage1-4", "Storage4-1", "Storage2-4", "Storage4-2", "Storage3-4", and "Storage4-3"
                 Write-Verbose "Architecture = $azureLocalArchitecture. Creating 12 private vSwitches and VM vNICs" -Verbose
                 VMSwitch "CreateStorageSwitch1-2" {
-                    Name      = "Storage1-2"
+                    Name      = "$vmPrefix-Storage1-2"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch2-1" {
-                    Name      = "Storage2-1"
+                    Name      = "$vmPrefix-Storage2-1"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch2-3" {
-                    Name      = "Storage2-3"
+                    Name      = "$vmPrefix-Storage2-3"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch3-2" {
-                    Name      = "Storage3-2"
+                    Name      = "$vmPrefix-Storage3-2"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch1-3" {
-                    Name      = "Storage1-3"
+                    Name      = "$vmPrefix-Storage1-3"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch3-1" {
-                    Name      = "Storage3-1"
+                    Name      = "$vmPrefix-Storage3-1"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch1-4" {
-                    Name      = "Storage1-4"
+                    Name      = "$vmPrefix-Storage1-4"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch4-1" {
-                    Name      = "Storage4-1"
+                    Name      = "$vmPrefix-Storage4-1"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch2-4" {
-                    Name      = "Storage2-4"
+                    Name      = "$vmPrefix-Storage2-4"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch4-2" {
-                    Name      = "Storage4-2"
+                    Name      = "$vmPrefix-Storage4-2"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch3-4" {
-                    Name      = "Storage3-4"
+                    Name      = "$vmPrefix-Storage3-4"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
                 }
 
                 VMSwitch "CreateStorageSwitch4-3" {
-                    Name      = "Storage4-3"
+                    Name      = "$vmPrefix-Storage4-3"
                     Type      = "Private"
                     Ensure    = "Present"
                     DependsOn = "[Script]Update DC"
@@ -1333,8 +1353,8 @@ configuration AzLWorkshop
                         VMNetworkAdapter "AzL$($machine.VM)$($nicName)" {
                             Id         = "$vmPrefix-AzL$($machine.VM)-$nicName-NIC"
                             VMName     = "$vmPrefix-AzL$($machine.VM)"
-                            Name       = $nicName
-                            SwitchName = $nicName
+                            Name       = "$nicName"
+                            SwitchName = "$vmPrefix-$nicName"
                             Ensure     = "Present"
                             DependsOn  = "[VMSwitch]CreateStorageSwitch1-2", "[VMSwitch]CreateStorageSwitch2-1", "[VMSwitch]CreateStorageSwitch2-3", "[VMSwitch]CreateStorageSwitch3-2", "[VMSwitch]CreateStorageSwitch1-3", "[VMSwitch]CreateStorageSwitch3-1", "[VMSwitch]CreateStorageSwitch1-4", "[VMSwitch]CreateStorageSwitch4-1", "[VMSwitch]CreateStorageSwitch2-4", "[VMSwitch]CreateStorageSwitch4-2", "[VMSwitch]CreateStorageSwitch3-4", "[VMSwitch]CreateStorageSwitch4-3"
                         }
@@ -1388,37 +1408,41 @@ configuration AzLWorkshop
             if ($azureLocalArchitecture -notlike "Single Machine" -and $azureLocalArchitecture -notlike "*Fully-Converged") {
                 Script "SetStorageVLANs" {
                     GetScript  = {
-                        $result = $true
-                        # Retrieve the list of VMs where the name matches the $vmPrefix-AzL* pattern
-                        Write-Verbose "Checking VLAN settings for Storage NICs in Azure Local VMs..." -Verbose
-                        Get-VM -Name "$Using:vmPrefix-AzL*" | ForEach-Object {
-                            $nics = Get-VMNetworkAdapter -VMName $($_.Name) | Where-Object Name -like "Storage*"
-                            Write-Verbose "Checking VLAN settings for $($_.Name)" -Verbose
-                            foreach ($nic in $nics) {
-                                Write-Verbose "Checking VLAN settings for $($nic.Name) on $($_.Name)" -Verbose
-                                $vlanSettings = Get-VMNetworkAdapterVlan -VMNetworkAdapterName $($nic.Name) -VMName $($_.Name)
-                                Write-Verbose "VLAN settings for $($nic.Name) on $($_.Name): $vlanSettings" -Verbose
-                                if (($vlanSettings.AllowedVlanIdListString -ne "711-719") -or $vlanSettings.NativeVlanId -ne 0) {
-                                    $result = $false
-                                    Write-Verbose "Correct VLAN settings for $($nic.Name) on $($_.Name): $result" -Verbose
-                                }
-                            }
-                        }
+                        $result = $false
                         return @{ 'Result' = $result }
                     }
                     SetScript  = {
-                        Write-Verbose "Setting VLANs for Storage NICs in Azure Local VMs..." -Verbose
-                        Get-VM -Name "$Using:vmPrefix-AzL*" | ForEach-Object {
-                            Write-Verbose "Setting VLANs for $($_.Name)" -Verbose
-                            $nics = Get-VMNetworkAdapter -VMName $($_.Name) | Where-Object Name -like "Storage*"
-                            foreach ($nic in $nics) {
-                                Write-Verbose "Setting VLAN 711-719 on $($nic.Name) on $($_.Name)" -Verbose
-                                Set-VMNetworkAdapterVlan -VMNetworkAdapterName $($nic.Name) -VMName $($_.Name) -Trunk -AllowedVlanIdList "711-719" -NativeVlanId 0
-                                # Enable Device Naming for the NIC
-                                Set-VMNetworkAdapter -VMNetworkAdapterName $($nic.Name) -VMName $($_.Name) -DeviceNaming On
-                                Write-Verbose "Enabled Device Naming for $($nic.Name) on $($_.Name)" -Verbose
+                        $retryCount = 0
+                        $success = $false
+                        do {
+                            try {
+                                Write-Verbose "Attempt $($retryCount + 1) to set VLANs for Storage NICs in Azure Local VMs..." -Verbose
+                                Get-VM -Name "$Using:vmPrefix-AzL*" | ForEach-Object {
+                                    Write-Verbose "Setting VLANs for $($_.Name)" -Verbose
+                                    $nics = Get-VMNetworkAdapter -VMName $($_.Name) | Where-Object Name -like "Storage*"
+                                    foreach ($nic in $nics) {
+                                        Write-Verbose "Setting VLAN 711-719 on $($nic.Name) on $($_.Name)" -Verbose
+                                        Set-VMNetworkAdapterVlan -VMNetworkAdapterName $($nic.Name) -VMName $($_.Name) -Trunk -AllowedVlanIdList "711-719" -NativeVlanId 0
+                                        # Enable Device Naming for the NIC
+                                        Set-VMNetworkAdapter -VMNetworkAdapterName $($nic.Name) -VMName $($_.Name) -DeviceNaming On
+                                        Write-Verbose "Enabled Device Naming for $($nic.Name) on $($_.Name)" -Verbose
+                                    }
+                                }
+                                $success = $true
+                                Write-Verbose "VLANs set successfully for Storage NICs in Azure Local VMs." -Verbose
                             }
-                        }
+                            catch {
+                                Write-Warning "Failed to set VLANs on $($_.Name). Error: $_" -Verbose
+                                $retryCount++
+                                if ($retryCount -lt $MaxRetries) {
+                                    Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
+                                    Start-Sleep -Seconds $RetryDelay
+                                }
+                                else {
+                                    Write-Error "Maximum retries ($MaxRetries) reached. Unable to set VLANs on $($_.Name)." -Verbose
+                                }
+                            }
+                        } while (-not $success -and $retryCount -lt $MaxRetries)
                     }
                     TestScript = {
                         $state = [scriptblock]::Create($GetScript).Invoke()
@@ -1443,65 +1467,64 @@ configuration AzLWorkshop
             # Update all the Nic Names in the AzL VMs to make it easier for configuring the networking during instance deployment
             Script "UpdateAzLNicNames" {
                 GetScript  = {
-                    $result = $true
-                    $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                    # Retrieve the list of VMs where the name matches the $vmPrefix-AzL* pattern
-                    Get-VM -Name "$Using:vmPrefix-AzL*" | ForEach-Object {
-                        Write-Verbose "Checking NIC names for $($_.Name)" -Verbose
-                        # Check inside each VM using Invoke-Command to see if any of the network adapters have the name "Ethernet*"
-                        $ethernetCheck = Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock {
-                            $ethernetNics = Get-NetAdapter | Where-Object { $_.Name -like "Ethernet*" }
-                            Write-Verbose "Checking for NICs with name like 'Ethernet'" -Verbose
-                            return $ethernetNics
-                        }
-                        if ($ethernetCheck) {
-                            $result = $false
-                            $result = $result
-                            Write-Verbose "NICs with name like 'Ethernet' found in $($_.Name)" -Verbose
-                            Write-Verbose "These names will be updated to ease deployment." -Verbose
-                        }
-                        else {
-                            Write-Verbose "No NICs with name like 'Ethernet' found in $($_.Name)" -Verbose
-                            Write-Verbose "No changes are necessary." -Verbose
-                        }
-                    }
+                    $result = $false
                     return @{ 'Result' = $result }
                 }
                 SetScript  = {
                     $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                    Get-VM -Name "$Using:vmPrefix-AzL*" | ForEach-Object {
-                        Write-Verbose "Updating NIC names for $($_.Name)" -Verbose
-                        $AzLNics = Get-VMNetworkAdapter -VMName $($_.Name)
-                        Write-Verbose "NICs in $($_.Name): $AzLNics" -Verbose
-                        foreach ($nic in $AzLNics) {
-                            Write-Verbose "Checking NIC $($nic.Name) in $($_.Name)" -Verbose
-                            $formattedMac = $nic.MacAddress -replace '(.{2})(?!$)', '$1-'
-                            Write-Verbose "Updating NIC $($nic.Name) inside VM: $($_.Name)" -Verbose
-                            Write-Verbose "NIC MAC Address: $formattedMac" -Verbose
-                            # Identfiy if this is a storage NIC
-                            if ($nic.Name -like "Storage*") {
-                                Write-Verbose "Identified Storage NIC: $($nic.Name)" -Verbose
-                                Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock { 
-                                    param($formattedMac, $nic)
-                                    Get-NetAdapter -Physical | Where-Object { $_.MacAddress -eq $formattedMac } | Rename-NetAdapter -NewName "$($nic.Name)"
-                                    Write-Verbose "Renamed NIC with MAC: $formattedMac to $($nic.Name)" -Verbose
-                                } -ArgumentList $formattedMac, $nic
+                    $retryCount = 0
+                    $success = $false
+                    do {
+                        try {
+                            Write-Verbose "Attempt $($retryCount + 1) to set NIC names for Azure Local VMs..." -Verbose
+                            Get-VM -Name "$Using:vmPrefix-AzL*" | ForEach-Object {
+                                Write-Verbose "Updating NIC names for $($_.Name)" -Verbose
+                                $AzLNics = Get-VMNetworkAdapter -VMName $($_.Name)
+                                Write-Verbose "NICs in $($_.Name): $AzLNics" -Verbose
+                                foreach ($nic in $AzLNics) {
+                                    Write-Verbose "Checking NIC $($nic.Name) in $($_.Name)" -Verbose
+                                    $formattedMac = $nic.MacAddress -replace '(.{2})(?!$)', '$1-'
+                                    Write-Verbose "Updating NIC $($nic.Name) inside VM: $($_.Name)" -Verbose
+                                    Write-Verbose "NIC MAC Address: $formattedMac" -Verbose
+                                    # Identfiy if this is a storage NIC
+                                    if ($nic.Name -like "Storage*") {
+                                        Write-Verbose "Identified Storage NIC: $($nic.Name)" -Verbose
+                                        Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock { 
+                                            param($formattedMac, $nic)
+                                            Get-NetAdapter -Physical | Where-Object { $_.MacAddress -eq $formattedMac } | Rename-NetAdapter -NewName "$($nic.Name)"
+                                            Write-Verbose "Renamed NIC with MAC: $formattedMac to $($nic.Name)" -Verbose
+                                        } -ArgumentList $formattedMac, $nic
+                                    }
+                                    # Perform same update on the Management NICs, which are identified -notlike "Storage*"
+                                    else {
+                                        Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock { 
+                                            param($formattedMac, $nic)
+                                            # Identify the target NIC by matching the MAC address
+                                            $targetNic = Get-NetAdapter -Physical | Where-Object { $_.MacAddress -eq $formattedMac }
+                                            Write-Verbose "Identified Management NIC: $($targetNic.Name)" -Verbose
+                                            # Update the NIC name to match the existing -RegistryKeyword 'HyperVNetworkAdapterName'.DisplayValue value for that specific adapter
+                                            $newName = (Get-NetAdapterAdvancedProperty -RegistryKeyword 'HyperVNetworkAdapterName' | Where-object { $_.Name -eq $targetNic.Name }).DisplayValue
+                                            Rename-NetAdapter -Name $targetNic.Name -NewName $newName
+                                            Write-Verbose "Renamed NIC with MAC: $formattedMac to $newName" -Verbose
+                                        } -ArgumentList $formattedMac, $nic
+                                    }
+                                }
                             }
-                            # Perform same update on the Management NICs, which are identified -notlike "Storage*"
+                            $success = $true
+                            Write-Verbose "NIC names set successfully for Azure Local VMs." -Verbose
+                        }
+                        catch {
+                            Write-Warning "Failed to set NIC names on $($_.Name). Error: $_" -Verbose
+                            $retryCount++
+                            if ($retryCount -lt $MaxRetries) {
+                                Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
+                                Start-Sleep -Seconds $RetryDelay
+                            }
                             else {
-                                Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock { 
-                                    param($formattedMac, $nic)
-                                    # Identify the target NIC by matching the MAC address
-                                    $targetNic = Get-NetAdapter -Physical | Where-Object { $_.MacAddress -eq $formattedMac }
-                                    Write-Verbose "Identified Management NIC: $($targetNic.Name)" -Verbose
-                                    # Update the NIC name to match the existing -RegistryKeyword 'HyperVNetworkAdapterName'.DisplayValue value for that specific adapter
-                                    $newName = (Get-NetAdapterAdvancedProperty -RegistryKeyword 'HyperVNetworkAdapterName' | Where-object { $_.Name -eq $targetNic.Name }).DisplayValue
-                                    Rename-NetAdapter -Name $targetNic.Name -NewName $newName
-                                    Write-Verbose "Renamed NIC with MAC: $formattedMac to $newName" -Verbose
-                                } -ArgumentList $formattedMac, $nic
+                                Write-Error "Maximum retries ($MaxRetries) reached. Unable to set NIC names on $($_.Name)." -Verbose
                             }
                         }
-                    }
+                    } while (-not $success -and $retryCount -lt $MaxRetries)
                 }
                 TestScript = {
                     $state = [scriptblock]::Create($GetScript).Invoke()
@@ -1522,25 +1545,45 @@ configuration AzLWorkshop
                     return @{ 'Result' = $result }
                 }
                 SetScript  = {
-                    # Get all VMs that are not the DC and disable DHCP on them
-                    $vmName = Get-VM | Where-Object { $_.Name -notlike "$Using:vmPrefix-DC" }
-                    Write-Verbose "Disabling DHCP on the following VMs: $($vmName.Name)" -Verbose
-                    ForEach ($vm in $vmName) {
-                        Write-Verbose "Disabling DHCP on $($vm.Name)" -Verbose
-                        $scriptCredential = New-Object System.Management.Automation.PSCredential (".\Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                        Invoke-Command -VMName $vm.Name -Credential $scriptCredential -ArgumentList $vm -ScriptBlock {
-                            param ($vm)
-                            Write-Verbose "Enable ping through the firewall on $($vm.Name)" -Verbose
-                            # Enable PING through the firewall
-                            Enable-NetFirewallRule -displayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
-                            # Get all NICs and check if DHCP is enabled, and if so, disable it
-                            Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Enabled' | ForEach-Object {
-                                Write-Verbose "$($vm.Name): Disabling DHCP on $($_.InterfaceAlias)" -Verbose
-                                Set-NetIPInterface -InterfaceAlias $_.InterfaceAlias -Dhcp Disabled
-                                Write-Verbose "$($vm.Name): Disabling DHCP on $($_.InterfaceAlias) - Done" -Verbose
+                    $retryCount = 0
+                    $success = $false
+                    do {
+                        try {
+                            Write-Verbose "Attempt $($retryCount + 1) to disable DHCP on the VMs" -Verbose
+                            # Get all VMs that are not the DC and disable DHCP on them
+                            $vmName = Get-VM | Where-Object { $_.Name -notlike "$Using:vmPrefix-DC" }
+                            Write-Verbose "Disabling DHCP on the following VMs: $($vmName.Name)" -Verbose
+                            ForEach ($vm in $vmName) {
+                                Write-Verbose "Disabling DHCP on $($vm.Name)" -Verbose
+                                $scriptCredential = New-Object System.Management.Automation.PSCredential (".\Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                                Invoke-Command -VMName $vm.Name -Credential $scriptCredential -ArgumentList $vm -ScriptBlock {
+                                    param ($vm)
+                                    Write-Verbose "Enable ping through the firewall on $($vm.Name)" -Verbose
+                                    # Enable PING through the firewall
+                                    Enable-NetFirewallRule -displayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
+                                    # Get all NICs and check if DHCP is enabled, and if so, disable it
+                                    Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Enabled' | ForEach-Object {
+                                        Write-Verbose "$($vm.Name): Disabling DHCP on $($_.InterfaceAlias)" -Verbose
+                                        Set-NetIPInterface -InterfaceAlias $_.InterfaceAlias -Dhcp Disabled
+                                        Write-Verbose "$($vm.Name): Disabling DHCP on $($_.InterfaceAlias) - Done" -Verbose
+                                    }
+                                }
+                            }
+                            $success = $true
+                            Write-Verbose "DHCP successfully disabled on all VMs" -Verbose
+                        }
+                        catch {
+                            Write-Warning "Failed to disable DHCP on $($vm.Name). Error: $_" -Verbose
+                            $retryCount++
+                            if ($retryCount -lt $MaxRetries) {
+                                Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
+                                Start-Sleep -Seconds $RetryDelay
+                            }
+                            else {
+                                Write-Error "Maximum retries ($MaxRetries) reached. Unable to disable DHCP on $($vm.Name)." -Verbose
                             }
                         }
-                    }
+                    } while (-not $success -and $retryCount -lt $MaxRetries)
                 }
                 TestScript = {
                     $state = [scriptblock]::Create($GetScript).Invoke()
@@ -1555,24 +1598,44 @@ configuration AzLWorkshop
                     return @{ 'Result' = $result }
                 }
                 SetScript  = {
-                    # Get the scope from DHCP by running an Invoke-Command against the DC VM
-                    $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                    Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
-                        $DhcpScope = Get-DhcpServerv4Scope
-                        Write-Verbose "DHCP Scope: $DhcpScope" -Verbose
-                        $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
-                        Write-Verbose "Short DHCP Scope: $shortDhcpScope" -Verbose
-                        # Start the scope at 50 to allow for Deployments with SDN optional services
-                        # As per here: https://learn.microsoft.com/en-us/azure/azure-local/plan/three-node-ip-requirements?view=azloc-24113#deployments-with-sdn-optional-services
-                        $newIpStartRange = ($shortDhcpScope + ".50")
-                        Write-Verbose "Updating DHCP scope to start at $newIpStartRange to allow for additional optional Azure Local services" -Verbose
-                        Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $DhcpScope.EndRange
-                        Write-Verbose "DHCP scope updated to start at $newIpStartRange" -Verbose
-                        Get-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId | Where-Object IPAddress -like "$shortDhcpScope*" | ForEach-Object {
-                            Remove-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId -Confirm:$false -ErrorAction SilentlyContinue
-                            Write-Verbose "Removed DHCP lease for IP address $($_.IPAddress)" -Verbose
+                    $retryCount = 0
+                    $success = $false
+                    do {
+                        try {
+                            Write-Verbose "Attempt $($retryCount + 1) to update DHCP scope" -Verbose
+                            # Get the scope from DHCP by running an Invoke-Command against the DC VM
+                            $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                            Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                                $DhcpScope = Get-DhcpServerv4Scope
+                                Write-Verbose "DHCP Scope: $DhcpScope" -Verbose
+                                $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
+                                Write-Verbose "Short DHCP Scope: $shortDhcpScope" -Verbose
+                                # Start the scope at 50 to allow for Deployments with SDN optional services
+                                # As per here: https://learn.microsoft.com/en-us/azure/azure-local/plan/three-node-ip-requirements?view=azloc-24113#deployments-with-sdn-optional-services
+                                $newIpStartRange = ($shortDhcpScope + ".50")
+                                Write-Verbose "Updating DHCP scope to start at $newIpStartRange to allow for additional optional Azure Local services" -Verbose
+                                Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $DhcpScope.EndRange
+                                Write-Verbose "DHCP scope updated to start at $newIpStartRange" -Verbose
+                                Get-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId | Where-Object IPAddress -like "$shortDhcpScope*" | ForEach-Object {
+                                    Remove-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId -Confirm:$false -ErrorAction SilentlyContinue
+                                    Write-Verbose "Removed DHCP lease for IP address $($_.IPAddress)" -Verbose
+                                }
+                            }
+                            $success = $true
+                            Write-Verbose "DHCP scope successfully updated" -Verbose
                         }
-                    }
+                        catch {
+                            Write-Warning "Failed to disable DHCP on $Using:vmPrefix-DC. Error: $_" -Verbose
+                            $retryCount++
+                            if ($retryCount -lt $MaxRetries) {
+                                Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
+                                Start-Sleep -Seconds $RetryDelay
+                            }
+                            else {
+                                Write-Error "Maximum retries ($MaxRetries) reached. Unable to update DHCP scope on $Using:vmPrefix-DC." -Verbose
+                            }
+                        }
+                    } while (-not $success -and $retryCount -lt $MaxRetries)
                 }
                 TestScript = {
                     $state = [scriptblock]::Create($GetScript).Invoke()
@@ -1593,99 +1656,119 @@ configuration AzLWorkshop
                     return @{ 'Result' = $result }
                 }
                 SetScript  = {
-                    $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                    $returnedValues = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
-                        $DhcpScope = Get-DhcpServerv4Scope
-                        Write-Verbose "DHCP Scope: $DhcpScope" -Verbose
-                        $subnetMask = $DhcpScope.SubnetMask.IPAddressToString
-                        Write-Verbose "Subnet Mask: $subnetMask" -Verbose
-                        $gateway = (Get-DhcpServerv4OptionValue -ScopeId $DhcpScope.ScopeId -OptionId 3).Value
-                        Write-Verbose "Gateway: $gateway" -Verbose
-                        $dnsServers = (Get-DhcpServerv4OptionValue -ScopeId $DhcpScope.ScopeId -OptionId 6).Value
-                        Write-Verbose "DNS Servers: $dnsServers" -Verbose
-                        return $DhcpScope, $subnetMask, $gateway, $dnsServers
-                    }
+                    $retryCount = 0
+                    $success = $false
+                    do {
+                        try {
+                            Write-Verbose "Attempt $($retryCount + 1) to set static IP addresses on all VMs" -Verbose
+                            $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                            $returnedValues = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                                $DhcpScope = Get-DhcpServerv4Scope
+                                Write-Verbose "DHCP Scope: $DhcpScope" -Verbose
+                                $subnetMask = $DhcpScope.SubnetMask.IPAddressToString
+                                Write-Verbose "Subnet Mask: $subnetMask" -Verbose
+                                $gateway = (Get-DhcpServerv4OptionValue -ScopeId $DhcpScope.ScopeId -OptionId 3).Value
+                                Write-Verbose "Gateway: $gateway" -Verbose
+                                $dnsServers = (Get-DhcpServerv4OptionValue -ScopeId $DhcpScope.ScopeId -OptionId 6).Value
+                                Write-Verbose "DNS Servers: $dnsServers" -Verbose
+                                return $DhcpScope, $subnetMask, $gateway, $dnsServers
+                            }
+                            # Unpack the returned values
+                            $DhcpScope = $returnedValues[0]
+                            $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
+                            $subnetMask = @($returnedValues[1]) # Ensure it is treated as a collection
+                            $gateway = @($returnedValues[2])    # Ensure it is treated as a collection
+                            $dnsServers = @($returnedValues[3]) # Ensure it is treated as a collection
+                            $vms = $Using:vms
 
-                    $DhcpScope = $returnedValues[0]
-                    $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
-                    $subnetMask = @($returnedValues[1]) # Ensure it is treated as a collection
-                    $gateway = @($returnedValues[2])    # Ensure it is treated as a collection
-                    $dnsServers = @($returnedValues[3]) # Ensure it is treated as a collection
-                    $vms = $Using:vms
-
-                    # Starting at .11 for the first node, define the IP range for the AzL nodes based on the $azureLocalMachines variable
-                    $AzLIpStart = ([ipaddress]("$shortDhcpScope.11"))
-                    $AzLIpRange = @()
-                    for ($i = 0; $i -lt $Using:azureLocalMachines; $i++) {
-                        $ipBytes = $AzLIpStart.GetAddressBytes()
-                        $ipBytes[3] += $i
-                        $AzLIpRange += [ipaddress]::new($ipBytes)
-                    }
+                            # Starting at .11 for the first node, define the IP range for the AzL nodes based on the $azureLocalMachines variable
+                            $AzLIpStart = ([ipaddress]("$shortDhcpScope.11"))
+                            $AzLIpRange = @()
+                            for ($i = 0; $i -lt $Using:azureLocalMachines; $i++) {
+                                $ipBytes = $AzLIpStart.GetAddressBytes()
+                                $ipBytes[3] += $i
+                                $AzLIpRange += [ipaddress]::new($ipBytes)
+                            }
                 
-                    # Create a hashtable to store the AzL VMs and their IP addresses
-                    $AzLIpMap = @{} # Initialize as a hashtable
-                    # Iterate through the arrays to create the mapping
-                    for ($i = 0; $i -lt $vms.Count; $i++) {
-                        $AzLIpMap[$vms[$i]] = $AzLIpRange[$i].IPAddressToString
-                    }
+                            # Create a hashtable to store the AzL VMs and their IP addresses
+                            $AzLIpMap = @{} # Initialize as a hashtable
+                            # Iterate through the arrays to create the mapping
+                            for ($i = 0; $i -lt $vms.Count; $i++) {
+                                $AzLIpMap[$vms[$i]] = $AzLIpRange[$i].IPAddressToString
+                            }
 
-                    # Sort the hashtable by $vms and ensure it remains a hashtable
-                    $AzLIpMap = [ordered]@{}
-                    foreach ($vm in $vms | Sort-Object) {
-                        $AzLIpMap[$vm] = $AzLIpRange[$vms.IndexOf($vm)].IPAddressToString
-                    }
+                            # Sort the hashtable by $vms and ensure it remains a hashtable
+                            $AzLIpMap = [ordered]@{}
+                            foreach ($vm in $vms | Sort-Object) {
+                                $AzLIpMap[$vm] = $AzLIpRange[$vms.IndexOf($vm)].IPAddressToString
+                            }
                 
-                    if ($Using:installWAC -eq 'Yes') {
-                        $wacIP = [ipaddress]("$shortDhcpScope.10")
-                        $AzLIpMap.Add('WAC', $wacIP.IPAddressToString)
-                    }
+                            if ($Using:installWAC -eq 'Yes') {
+                                $wacIP = [ipaddress]("$shortDhcpScope.10")
+                                $AzLIpMap.Add('WAC', $wacIP.IPAddressToString)
+                            }
 
-                    # Statically assign the IP
-                    foreach ($vm in $AzLIpMap.Keys) {
-                        $vmName = "$Using:vmPrefix-$vm"
-                        $vmIpAddress = @()
-                        $vmIpAddress = @($AzLIpMap[$vm])
+                            # Statically assign the IP
+                            foreach ($vm in $AzLIpMap.Keys) {
+                                $vmName = "$Using:vmPrefix-$vm"
+                                $vmIpAddress = @()
+                                $vmIpAddress = @($AzLIpMap[$vm])
 
-                        Write-Verbose "Setting static IP for $vmName to $($vmIpAddress)" -Verbose
+                                Write-Verbose "Setting static IP for $vmName to $($vmIpAddress)" -Verbose
 
-                        $networkAdapter = Get-VMNetworkAdapter -VMName $vmName -Name "Management1"
-                        $vmToUpdate = Get-CimInstance -Namespace "root\virtualization\v2" -ClassName "Msvm_ComputerSystem" | Where-Object ElementName -eq $networkAdapter.VMName
-                        $vmSettings = Get-CimAssociatedInstance -InputObject $vmToUpdate -ResultClassName "Msvm_VirtualSystemSettingData" | Where-Object VirtualSystemType -EQ "Microsoft:Hyper-V:System:Realized"
-                        $vmNetAdapters = Get-CimAssociatedInstance -InputObject $vmSettings -ResultClassName "Msvm_SyntheticEthernetPortSettingData"
+                                $networkAdapter = Get-VMNetworkAdapter -VMName $vmName -Name "Management1"
+                                $vmToUpdate = Get-CimInstance -Namespace "root\virtualization\v2" -ClassName "Msvm_ComputerSystem" | Where-Object ElementName -eq $networkAdapter.VMName
+                                $vmSettings = Get-CimAssociatedInstance -InputObject $vmToUpdate -ResultClassName "Msvm_VirtualSystemSettingData" | Where-Object VirtualSystemType -EQ "Microsoft:Hyper-V:System:Realized"
+                                $vmNetAdapters = Get-CimAssociatedInstance -InputObject $vmSettings -ResultClassName "Msvm_SyntheticEthernetPortSettingData"
             
-                        $networkAdapterConfiguration = @()
-                        foreach ($netAdapter in $vmNetAdapters) {
-                            if ($netAdapter.ElementName -eq $networkAdapter.Name) {
-                                $networkAdapterConfiguration = Get-CimAssociatedInstance -InputObject $netAdapter -ResultClassName "Msvm_GuestNetworkAdapterConfiguration"
-                                break
+                                $networkAdapterConfiguration = @()
+                                foreach ($netAdapter in $vmNetAdapters) {
+                                    if ($netAdapter.ElementName -eq $networkAdapter.Name) {
+                                        $networkAdapterConfiguration = Get-CimAssociatedInstance -InputObject $netAdapter -ResultClassName "Msvm_GuestNetworkAdapterConfiguration"
+                                        break
+                                    }
+                                }
+            
+                                $networkAdapterConfiguration.PSBase.CimInstanceProperties["IPAddresses"].Value = $vmIpAddress
+                                $networkAdapterConfiguration.PSBase.CimInstanceProperties["Subnets"].Value = $subnetMask
+                                $networkAdapterConfiguration.PSBase.CimInstanceProperties["DefaultGateways"].Value = $gateway
+                                $networkAdapterConfiguration.PSBase.CimInstanceProperties["DNSServers"].Value = $dnsServers
+                                $networkAdapterConfiguration.PSBase.CimInstanceProperties["ProtocolIFType"].Value = 4096
+                                $networkAdapterConfiguration.PSBase.CimInstanceProperties["DHCPEnabled"].Value = $false
+            
+                                $cimSerializer = [Microsoft.Management.Infrastructure.Serialization.CimSerializer]::Create()
+                                $serializedInstance = $cimSerializer.Serialize($networkAdapterConfiguration, [Microsoft.Management.Infrastructure.Serialization.InstanceSerializationOptions]::None)
+                                $serializedInstanceString = [System.Text.Encoding]::Unicode.GetString($serializedInstance)
+            
+                                $service = Get-CimInstance -ClassName "Msvm_VirtualSystemManagementService" -Namespace "root\virtualization\v2"
+                                $setIp = Invoke-CimMethod -InputObject $service -MethodName "SetGuestNetworkAdapterConfiguration" -Arguments @{
+                                    ComputerSystem       = $vmToUpdate
+                                    NetworkConfiguration = @($serializedInstanceString)
+                                }
+                                if ($setIp.ReturnValue -eq 0) {
+                                    # completed
+                                    Write-Verbose "Management1 IP on $vmName to $vmIpAddress" -Verbose
+                                }
+                                else {
+                                    # unexpected response
+                                    $setIp
+                                }
+                            }
+                            $success = $true
+                            Write-Verbose "All VMs have been assigned static IP addresses" -Verbose
+                        }
+                        catch {
+                            Write-Warning "Failed to set a static IP on $Using:vmPrefix-$vm. Error: $_" -Verbose
+                            $retryCount++
+                            if ($retryCount -lt $MaxRetries) {
+                                Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
+                                Start-Sleep -Seconds $RetryDelay
+                            }
+                            else {
+                                Write-Error "Maximum retries ($MaxRetries) reached. Unable to set a static IP on $Using:vmPrefix-$vm." -Verbose
                             }
                         }
-            
-                        $networkAdapterConfiguration.PSBase.CimInstanceProperties["IPAddresses"].Value = $vmIpAddress
-                        $networkAdapterConfiguration.PSBase.CimInstanceProperties["Subnets"].Value = $subnetMask
-                        $networkAdapterConfiguration.PSBase.CimInstanceProperties["DefaultGateways"].Value = $gateway
-                        $networkAdapterConfiguration.PSBase.CimInstanceProperties["DNSServers"].Value = $dnsServers
-                        $networkAdapterConfiguration.PSBase.CimInstanceProperties["ProtocolIFType"].Value = 4096
-                        $networkAdapterConfiguration.PSBase.CimInstanceProperties["DHCPEnabled"].Value = $false
-            
-                        $cimSerializer = [Microsoft.Management.Infrastructure.Serialization.CimSerializer]::Create()
-                        $serializedInstance = $cimSerializer.Serialize($networkAdapterConfiguration, [Microsoft.Management.Infrastructure.Serialization.InstanceSerializationOptions]::None)
-                        $serializedInstanceString = [System.Text.Encoding]::Unicode.GetString($serializedInstance)
-            
-                        $service = Get-CimInstance -ClassName "Msvm_VirtualSystemManagementService" -Namespace "root\virtualization\v2"
-                        $setIp = Invoke-CimMethod -InputObject $service -MethodName "SetGuestNetworkAdapterConfiguration" -Arguments @{
-                            ComputerSystem       = $vmToUpdate
-                            NetworkConfiguration = @($serializedInstanceString)
-                        }
-                        if ($setIp.ReturnValue -eq 0) {
-                            # completed
-                            Write-Verbose "Management1 IP on $vmName to $vmIpAddress" -Verbose
-                        }
-                        else {
-                            # unexpected response
-                            $setIp
-                        }
-                    }
+                    } while (-not $success -and $retryCount -lt $MaxRetries)
                 }
                 TestScript = {
                     $state = [scriptblock]::Create($GetScript).Invoke()
@@ -1704,56 +1787,75 @@ configuration AzLWorkshop
                     return @{ 'Result' = $result }
                 }
                 SetScript  = {
-                    $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                    Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential `
-                        -ArgumentList $Using:domainName, $Using:azureLocalMachines, $Using:vms, $Using:installWAC -ScriptBlock {
-                        param ($domainName, $azureLocalMachines, $vms, $installWAC)
 
-                        # Get the current DHCP info
-                        $DhcpScope = Get-DhcpServerv4Scope
-                        $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
+                    do {
+                        try {
+                            Write-Verbose "Attempt $($retryCount + 1) to update DNS records on the DC" -Verbose
+                            $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                            Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential `
+                                -ArgumentList $Using:domainName, $Using:azureLocalMachines, $Using:vms, $Using:installWAC -ScriptBlock {
+                                param ($domainName, $azureLocalMachines, $vms, $installWAC)
 
-                        # Starting at .11 for the first AzL node, define the IP range for the AzL nodes based on the $azureLocalMachines variable
-                        $AzLIpStart = ([ipaddress]("$shortDhcpScope.11"))
-                        $AzLIpRange = @()
-                        for ($i = 0; $i -lt $azureLocalMachines; $i++) {
-                            $ipBytes = $AzLIpStart.GetAddressBytes()
-                            $ipBytes[3] += $i
-                            $AzLIpRange += [ipaddress]::new($ipBytes)
-                        }
+                                # Get the current DHCP info
+                                $DhcpScope = Get-DhcpServerv4Scope
+                                $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
+
+                                # Starting at .11 for the first AzL node, define the IP range for the AzL nodes based on the $azureLocalMachines variable
+                                $AzLIpStart = ([ipaddress]("$shortDhcpScope.11"))
+                                $AzLIpRange = @()
+                                for ($i = 0; $i -lt $azureLocalMachines; $i++) {
+                                    $ipBytes = $AzLIpStart.GetAddressBytes()
+                                    $ipBytes[3] += $i
+                                    $AzLIpRange += [ipaddress]::new($ipBytes)
+                                }
                 
-                        # Create a hashtable to store the AzL VMs and their IP addresses
-                        $AzLIpMap = @{} # Initialize as a hashtable
-                        # Iterate through the arrays to create the mapping
-                        for ($i = 0; $i -lt $vms.Count; $i++) {
-                            $AzLIpMap[$vms[$i]] = $AzLIpRange[$i].IPAddressToString
-                        }
+                                # Create a hashtable to store the AzL VMs and their IP addresses
+                                $AzLIpMap = @{} # Initialize as a hashtable
+                                # Iterate through the arrays to create the mapping
+                                for ($i = 0; $i -lt $vms.Count; $i++) {
+                                    $AzLIpMap[$vms[$i]] = $AzLIpRange[$i].IPAddressToString
+                                }
 
-                        # Sort the hashtable by $vms and ensure it remains a hashtable
-                        $AzLIpMap = [ordered]@{}
-                        foreach ($vm in $vms | Sort-Object) {
-                            $AzLIpMap[$vm] = $AzLIpRange[$vms.IndexOf($vm)].IPAddressToString
-                        }
+                                # Sort the hashtable by $vms and ensure it remains a hashtable
+                                $AzLIpMap = [ordered]@{}
+                                foreach ($vm in $vms | Sort-Object) {
+                                    $AzLIpMap[$vm] = $AzLIpRange[$vms.IndexOf($vm)].IPAddressToString
+                                }
                 
-                        if ($installWAC -eq 'Yes') {
-                            $wacIP = [ipaddress]("$shortDhcpScope.10")
-                            $AzLIpMap.Add('WAC', $wacIP.IPAddressToString)
-                        }
+                                if ($installWAC -eq 'Yes') {
+                                    $wacIP = [ipaddress]("$shortDhcpScope.10")
+                                    $AzLIpMap.Add('WAC', $wacIP.IPAddressToString)
+                                }
 
-                        foreach ($vm in $AzLIpMap.Keys) {
-                            $dnsName = $vm
-                            $vmIpAddress = $AzLIpMap[$vm]
-                            # Need to check if any DNS records exist for "AzL*"" or "WAC" and remove them
-                            Write-Verbose "Checking for existing DNS Record for $dnsName" -Verbose
-                            $dnsCheck = Get-DnsServerResourceRecord -Name $dnsName -ZoneName $domainName -ErrorAction SilentlyContinue
-                            foreach ($entry in $dnsCheck) {
-                                Write-Verbose "Cleaning up existing DNS entry for $($entry.HostName)" -Verbose
-                                Remove-DnsServerResourceRecord $entry.HostName -ZoneName $domainName -RRType A -Force
+                                foreach ($vm in $AzLIpMap.Keys) {
+                                    $dnsName = $vm
+                                    $vmIpAddress = $AzLIpMap[$vm]
+                                    # Need to check if any DNS records exist for "AzL*"" or "WAC" and remove them
+                                    Write-Verbose "Checking for existing DNS Record for $dnsName" -Verbose
+                                    $dnsCheck = Get-DnsServerResourceRecord -Name $dnsName -ZoneName $domainName -ErrorAction SilentlyContinue
+                                    foreach ($entry in $dnsCheck) {
+                                        Write-Verbose "Cleaning up existing DNS entry for $($entry.HostName)" -Verbose
+                                        Remove-DnsServerResourceRecord $entry.HostName -ZoneName $domainName -RRType A -Force
+                                    }
+                                    Write-Verbose "Creating new DNS record for $dnsName with IP: $vmIpAddress in Zone: $domainName" -Verbose
+                                    Add-DnsServerResourceRecordA -Name $dnsName -ZoneName $domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
+                                }
                             }
-                            Write-Verbose "Creating new DNS record for $dnsName with IP: $vmIpAddress in Zone: $domainName" -Verbose
-                            Add-DnsServerResourceRecordA -Name $dnsName -ZoneName $domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
+                            $success = $true
+                            Write-Verbose "DNS records have been successfully updated" -Verbose
                         }
-                    }
+                        catch {
+                            Write-Warning "Failed to update DNS record on the DC for $Using:vmPrefix-$vm. Error: $_" -Verbose
+                            $retryCount++
+                            if ($retryCount -lt $MaxRetries) {
+                                Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
+                                Start-Sleep -Seconds $RetryDelay
+                            }
+                            else {
+                                Write-Error "Maximum retries ($MaxRetries) reached. Unable to update DNS record on the DC for $Using:vmPrefix-$vm." -Verbose
+                            }
+                        }
+                    } while (-not $success -and $retryCount -lt $MaxRetries)
                 }
                 TestScript = {
                     $state = [scriptblock]::Create($GetScript).Invoke()

@@ -18,7 +18,8 @@ param
     [String]$AzureLocalIsoPath,
     [Switch]$AutoDownloadWSiso,
     [Switch]$AutoDownloadAzLiso,
-    [String]$dnsForwarders
+    [String]$dnsForwarders,
+    [String]$deploymentPrefix
 )
 
 $VerbosePreference = 'SilentlyContinue'
@@ -59,6 +60,15 @@ try {
         Write-Host "The password provided does not meet the complexity requirements. Please rerun the script and provide a password that is at least 12 characters long, and contains at least one of each of the following: uppercase, lowercase, number and special character." -ForegroundColor Red
         Start-Sleep -Seconds 5
         break
+    }
+
+    # Need to check if there's a deployment prefix, and if not, set it to AzLDW01
+    if (!($deploymentPrefix)) {
+        $deploymentPrefix = "AzLDW01"
+        Write-Host "No deployment prefix provided. Using default value of $deploymentPrefix" -ForegroundColor Green
+    }
+    else {
+        Write-Host "Using deployment prefix of $deploymentPrefix" -ForegroundColor Green
     }
 
     # Need to ensure that $domainName is provided, and that it is a valid domain name, with a maximum of 1 subdomain
@@ -446,7 +456,8 @@ try {
 
     AzLWorkshop -workshopPath $workshopPath -azureLocalArchitecture $azureLocalArchitecture -adminCreds $adminCreds -domainName $domainName `
         -azureLocalMachineMemory $azureLocalMachineMemory -telemetryLevel $telemetryLevel -updateImages $updateImages `
-        -WindowsServerIsoPath $WindowsServerIsoPath -AzureLocalIsoPath $AzureLocalIsoPath -customDNSForwarders $customDNSForwarders -installWAC $installWAC
+        -WindowsServerIsoPath $WindowsServerIsoPath -AzureLocalIsoPath $AzureLocalIsoPath -customDNSForwarders $customDNSForwarders `
+        -installWAC $installWAC -deploymentPrefix $deploymentPrefix
 
     # Create a PS1 file that will be placed on the current user's desktop
     $ps1Path = "$env:USERPROFILE\Desktop\AzureLocalWorkshop.ps1"
