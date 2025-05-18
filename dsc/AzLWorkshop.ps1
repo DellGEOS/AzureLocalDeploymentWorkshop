@@ -1412,6 +1412,7 @@ configuration AzLWorkshop
                         return @{ 'Result' = $result }
                     }
                     SetScript  = {
+                        $ErrorActionPreference = "SilentlyContinue"
                         $retryCount = 0
                         $success = $false
                         do {
@@ -1439,7 +1440,7 @@ configuration AzLWorkshop
                                     Start-Sleep -Seconds $RetryDelay
                                 }
                                 else {
-                                    Write-Error "Maximum retries ($MaxRetries) reached. Unable to set VLANs on $($_.Name)." -Verbose
+                                    Throw "Maximum retries ($MaxRetries) reached. Unable to set VLANs on $($_.Name)."
                                 }
                             }
                         } while (-not $success -and $retryCount -lt $MaxRetries)
@@ -1471,6 +1472,7 @@ configuration AzLWorkshop
                     return @{ 'Result' = $result }
                 }
                 SetScript  = {
+                    $ErrorActionPreference = "SilentlyContinue"
                     $scriptCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                     $retryCount = 0
                     $success = $false
@@ -1487,7 +1489,7 @@ configuration AzLWorkshop
                                     Write-Verbose "Updating NIC $($nic.Name) inside VM: $($_.Name)" -Verbose
                                     Write-Verbose "NIC MAC Address: $formattedMac" -Verbose
                                     # Identfiy if this is a storage NIC
-                                    if ($nic.Name -like "Storage*") {
+                                    if ($nic.Name -like "*Storage*") {
                                         Write-Verbose "Identified Storage NIC: $($nic.Name)" -Verbose
                                         Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock { 
                                             param($formattedMac, $nic)
@@ -1521,7 +1523,7 @@ configuration AzLWorkshop
                                 Start-Sleep -Seconds $RetryDelay
                             }
                             else {
-                                Write-Error "Maximum retries ($MaxRetries) reached. Unable to set NIC names on $($_.Name)." -Verbose
+                                Throw "Maximum retries ($MaxRetries) reached. Unable to set NIC names on $($_.Name)."
                             }
                         }
                     } while (-not $success -and $retryCount -lt $MaxRetries)
@@ -1545,6 +1547,7 @@ configuration AzLWorkshop
                     return @{ 'Result' = $result }
                 }
                 SetScript  = {
+                    $ErrorActionPreference = "SilentlyContinue"
                     $retryCount = 0
                     $success = $false
                     do {
@@ -1580,7 +1583,7 @@ configuration AzLWorkshop
                                 Start-Sleep -Seconds $RetryDelay
                             }
                             else {
-                                Write-Error "Maximum retries ($MaxRetries) reached. Unable to disable DHCP on $($vm.Name)." -Verbose
+                                Throw "Maximum retries ($MaxRetries) reached. Unable to disable DHCP on $($vm.Name)."
                             }
                         }
                     } while (-not $success -and $retryCount -lt $MaxRetries)
@@ -1598,6 +1601,7 @@ configuration AzLWorkshop
                     return @{ 'Result' = $result }
                 }
                 SetScript  = {
+                    $ErrorActionPreference = "SilentlyContinue"
                     $retryCount = 0
                     $success = $false
                     do {
@@ -1632,7 +1636,7 @@ configuration AzLWorkshop
                                 Start-Sleep -Seconds $RetryDelay
                             }
                             else {
-                                Write-Error "Maximum retries ($MaxRetries) reached. Unable to update DHCP scope on $Using:vmPrefix-DC." -Verbose
+                                Throw "Maximum retries ($MaxRetries) reached. Unable to update DHCP scope on $Using:vmPrefix-DC."
                             }
                         }
                     } while (-not $success -and $retryCount -lt $MaxRetries)
@@ -1656,6 +1660,7 @@ configuration AzLWorkshop
                     return @{ 'Result' = $result }
                 }
                 SetScript  = {
+                    $ErrorActionPreference = "SilentlyContinue"
                     $retryCount = 0
                     $success = $false
                     do {
@@ -1765,7 +1770,7 @@ configuration AzLWorkshop
                                 Start-Sleep -Seconds $RetryDelay
                             }
                             else {
-                                Write-Error "Maximum retries ($MaxRetries) reached. Unable to set a static IP on $Using:vmPrefix-$vm." -Verbose
+                                Throw "Maximum retries ($MaxRetries) reached. Unable to set a static IP on $Using:vmPrefix-$vm."
                             }
                         }
                     } while (-not $success -and $retryCount -lt $MaxRetries)
@@ -1852,7 +1857,7 @@ configuration AzLWorkshop
                                 Start-Sleep -Seconds $RetryDelay
                             }
                             else {
-                                Write-Error "Maximum retries ($MaxRetries) reached. Unable to update DNS record on the DC for $Using:vmPrefix-$vm." -Verbose
+                                Throw "Maximum retries ($MaxRetries) reached. Unable to update DNS record on the DC for $Using:vmPrefix-$vm."
                             }
                         }
                     } while (-not $success -and $retryCount -lt $MaxRetries)
