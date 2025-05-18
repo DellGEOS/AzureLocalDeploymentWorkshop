@@ -313,21 +313,28 @@ try {
     }
 
     # Create a Do While loop to check if the deployment prefix is already in use by checking names of existing VMs
-    Do {
-        $existingVMs = Get-VM | Where-Object { $_.Name -like "$($deploymentPrefix)*" }
-        if ($existingVMs) {
-            Write-Host "The deployment prefix $($deploymentPrefix) is already in use by the following VMs:" -ForegroundColor Yellow
-            foreach ($vm in $existingVMs) {
-                Write-Host "$($vm.Name)"
+    try {
+        Do {
+            $existingVMs = Get-VM -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($deploymentPrefix)*" }
+            if ($existingVMs) {
+                Write-Host "The deployment prefix $($deploymentPrefix) is already in use by the following VMs:" -ForegroundColor Yellow
+                foreach ($vm in $existingVMs) {
+                    Write-Host "$($vm.Name)"
+                }
+                $deploymentPrefix = Read-Host "Please enter a new deployment prefix (or Q to exit)"
+                if ($deploymentPrefix -eq "Q") {
+                    Write-Host 'Exiting...' -ForegroundColor Red
+                    Start-Sleep -Seconds 5
+                    break 
+                }
             }
-            $deploymentPrefix = Read-Host "Please enter a new deployment prefix (or Q to exit)"
-            if ($deploymentPrefix -eq "Q") {
-                Write-Host 'Exiting...' -ForegroundColor Red
-                Start-Sleep -Seconds 5
-                break 
-            }
-        }
-    } while ($existingVMs)
+        } while ($existingVMs)
+    }
+    catch {
+        Write-Host "Get-VM failed to run. This is likely due to the Hyper-V role not being installed." -ForegroundColor Green
+        Write-Host "No existing VMs found with the prefix $($deploymentPrefix). Proceeding with deployment..." -ForegroundColor Green
+        # Continue script execution
+    }
 
     if (!($AutoDownloadWSiso)) {
         if (!($WindowsServerIsoPath)) {
