@@ -355,7 +355,8 @@
         "publicIpAddressType": "Dynamic",
         "publicIpAddressSku": "Basic",
         "vnetId": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]",
-        "subnetRef": "[concat(variables('vnetId'), '/subnets/', variables('subnetName'))]"
+        "subnetRef": "[concat(variables('vnetId'), '/subnets/', variables('subnetName'))]",
+        "deploymentPrefix": "AzLDW01"
     },
     "resources": [
         {
@@ -548,7 +549,8 @@
                                 "domainName": "[parameters('domainName')]",
                                 "telemetryLevel": "[parameters('telemetryLevel')]",
                                 "updateImages": "[parameters('updateImages')]",
-                                "installWAC": "[parameters('installWAC')]"
+                                "installWAC": "[parameters('installWAC')]",
+                                "deploymentPrefix": "[variables('deploymentPrefix')]"
                             }
                         },
                         "protectedSettings": {
