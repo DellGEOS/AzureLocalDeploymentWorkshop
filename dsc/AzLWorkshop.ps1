@@ -1576,7 +1576,7 @@ configuration AzLWorkshop
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
-                DependsOn  = "[Script]RestartAzLVMs"
+                DependsOn  = "[Script]StartAzLVMs"
             }
 
             #######################################################################
