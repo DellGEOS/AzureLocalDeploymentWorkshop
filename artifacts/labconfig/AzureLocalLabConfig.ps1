@@ -1,7 +1,7 @@
 # Define core lab characteristics
 $LabConfig = @{ DomainAdminName = '<<DomainAdminName>>'; AdminPassword = '<<AdminPassword>>'; DCEdition = '4'; ServerISOFolder = '<<WSServerIsoPath>>'; `
                 ServerMSUsFolder = '<<MsuFolder>>'; DomainNetbiosName = '<<DomainNetBios>>'; DefaultOUName = "AzLWorkshop"; DomainName = '<<DomainName>>'; `
-                Internet = $true ; TelemetryLevel = '<<TelemetryLevel>>'; AutoStartAfterDeploy = $true; VMs = @(); AutoClosePSWindows = $true; `
+                Internet = $true ; TelemetryLevel = '<<TelemetryLevel>>'; AutoStartAfterDeploy = $false; VMs = @(); AutoClosePSWindows = $true; `
                 DHCPscope="192.168.1.0"; DHCPscopeState = "Active"; AutoCleanUp = $true; SwitchName = "<<vSwitchName>>"; Prefix = "<<VmPrefix>>-"; AllowedVLANs="<<allowedVlans>>"; `
                 CustomDnsForwarders=@("<<customDNSForwarders>>"); AdditionalNetworksConfig=@()
 }

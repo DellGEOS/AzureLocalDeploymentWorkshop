@@ -877,7 +877,7 @@ configuration AzLWorkshop
             }
 
             #######################################################################
-            ## Create Parent Disks
+            ## Deploy Environment
             #######################################################################
 
             Script "MSLab DeployEnvironment" {
@@ -893,14 +893,37 @@ configuration AzLWorkshop
                     Write-Verbose "MSLab deployment complete" -Verbose
                     $deployFlag = "$Using:flagsPath\DeployComplete.txt"
                     New-Item $deployFlag -ItemType file -Force
-                    Write-Verbose "Sleeping for 2 minutes to allow for AzL nested hosts to reboot as required" -Verbose
-                    Start-Sleep -Seconds 120
                 }
                 TestScript = {
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
                 DependsOn  = "[Script]MSLab CreateParentDisks"
+            }
+
+            #######################################################################
+            ## Start Domain Controller and Windows Admin Center
+            #######################################################################
+
+            Script "Start DC and WAC" {
+                GetScript  = {
+                    Write-Verbose "Checking if Domain Controller and Windows Admin Center are running" -Verbose
+                    $result = (Get-VM -Name "$Using:vmPrefix-DC").State -eq 'Running' -and (Get-VM -Name "$Using:vmPrefix-WAC").State -eq 'Running'
+                    return @{ 'Result' = $result }
+                }
+                SetScript  = {
+                    Write-Verbose "Starting Domain Controller and Windows Admin Center" -Verbose
+                    Start-VM -Name "$Using:vmPrefix-DC"
+                    Start-VM -Name "$Using:vmPrefix-WAC"
+                    Write-Verbose "Domain Controller and Windows Admin Center started" -Verbose
+                    # Wait 120 seconds for the VMs to start fully
+                    Start-Sleep -Seconds 120
+                }
+                TestScript = {
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "[Script]MSLab DeployEnvironment"
             }
 
             #######################################################################
@@ -1454,9 +1477,54 @@ configuration AzLWorkshop
             }
 
             # Quick switch to determine the correct dependsOn for updating the AzLNicNames
-            $updateAzLNicNamesDependsOn = switch ($azureLocalArchitecture) {
+            $RebootAzLDependsOn = switch ($azureLocalArchitecture) {
                 { $_ -eq "Single Machine" -or $_ -like "*Fully-Converged" } { '[Script]Update DC' }
                 Default { '[Script]SetStorageVLANs' }
+            }
+
+            #######################################################################
+            ## Start the AzL VMs and wait for them to come online
+            #######################################################################
+
+            Write-Verbose "Starting the AzL VMs and waiting for them to come online" -Verbose
+
+            Script "StartAzLVMs" {
+                GetScript  = {
+                    $result = $false
+                    return @{ 'Result' = $result }
+                }
+                SetScript  = {
+                    $ErrorActionPreference = "SilentlyContinue"
+                    $retryCount = 0
+                    $success = $false
+                    do {
+                        try {
+                            Write-Verbose "Attempt $($retryCount + 1) to Start the AzL VMs..." -Verbose
+                            Get-VM -Name "$Using:vmPrefix-AzL*" | Start-VM -Verbose
+                            $success = $true
+                            Write-Verbose "AzL VMs started successfully." -Verbose
+                            # Wait 240 seconds for the VMs to come online
+                            Write-Verbose "Waiting for 240 seconds for the VMs to come online..." -Verbose
+                            Start-Sleep -Seconds 240
+                        }
+                        catch {
+                            Write-Warning "Failed to start AzL VMs. Error: $_" -Verbose
+                            $retryCount++
+                            if ($retryCount -lt $MaxRetries) {
+                                Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
+                                Start-Sleep -Seconds $RetryDelay
+                            }
+                            else {
+                                Throw "Maximum retries ($MaxRetries) reached. Unable to start AzL VMs."
+                            }
+                        }
+                    } while (-not $success -and $retryCount -lt $MaxRetries)
+                }
+                TestScript = {
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = $RebootAzLDependsOn
             }
 
             #######################################################################
@@ -1481,34 +1549,10 @@ configuration AzLWorkshop
                             Write-Verbose "Attempt $($retryCount + 1) to set NIC names for Azure Local VMs..." -Verbose
                             Get-VM -Name "$Using:vmPrefix-AzL*" | ForEach-Object {
                                 Write-Verbose "Updating NIC names for $($_.Name)" -Verbose
-                                $AzLNics = Get-VMNetworkAdapter -VMName $($_.Name)
-                                Write-Verbose "NICs in $($_.Name): $AzLNics" -Verbose
-                                foreach ($nic in $AzLNics) {
-                                    Write-Verbose "Checking NIC $($nic.Name) in $($_.Name)" -Verbose
-                                    $formattedMac = $nic.MacAddress -replace '(.{2})(?!$)', '$1-'
-                                    Write-Verbose "Updating NIC $($nic.Name) inside VM: $($_.Name)" -Verbose
-                                    Write-Verbose "NIC MAC Address: $formattedMac" -Verbose
-                                    # Identfiy if this is a storage NIC
-                                    if ($nic.Name -like "*Storage*") {
-                                        Write-Verbose "Identified Storage NIC: $($nic.Name)" -Verbose
-                                        Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock { 
-                                            param($formattedMac, $nic)
-                                            Get-NetAdapter -Physical | Where-Object { $_.MacAddress -eq $formattedMac } | Rename-NetAdapter -NewName "$($nic.Name)"
-                                            Write-Verbose "Renamed NIC with MAC: $formattedMac to $($nic.Name)" -Verbose
-                                        } -ArgumentList $formattedMac, $nic
-                                    }
-                                    # Perform same update on the Management NICs, which are identified -notlike "Storage*"
-                                    else {
-                                        Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock { 
-                                            param($formattedMac, $nic)
-                                            # Identify the target NIC by matching the MAC address
-                                            $targetNic = Get-NetAdapter -Physical | Where-Object { $_.MacAddress -eq $formattedMac }
-                                            Write-Verbose "Identified Management NIC: $($targetNic.Name)" -Verbose
-                                            # Update the NIC name to match the existing -RegistryKeyword 'HyperVNetworkAdapterName'.DisplayValue value for that specific adapter
-                                            $newName = (Get-NetAdapterAdvancedProperty -RegistryKeyword 'HyperVNetworkAdapterName' | Where-object { $_.Name -eq $targetNic.Name }).DisplayValue
-                                            Rename-NetAdapter -Name $targetNic.Name -NewName $newName
-                                            Write-Verbose "Renamed NIC with MAC: $formattedMac to $newName" -Verbose
-                                        } -ArgumentList $formattedMac, $nic
+                                Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock {
+                                    foreach ($N in (Get-NetAdapterAdvancedProperty -DisplayName "Hyper-V Network Adapter Name" | Where-Object DisplayValue -NotLike "")) {
+                                        $N | Rename-NetAdapter -NewName $n.DisplayValue -Verbose
+                                        Write-Verbose "Renamed NIC with MAC: $($N.MacAddress) to $($n.DisplayValue)" -Verbose
                                     }
                                 }
                             }
@@ -1532,7 +1576,7 @@ configuration AzLWorkshop
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
-                DependsOn  = $updateAzLNicNamesDependsOn
+                DependsOn  = "[Script]RestartAzLVMs"
             }
 
             #######################################################################
