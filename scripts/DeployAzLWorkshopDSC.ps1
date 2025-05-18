@@ -62,15 +62,6 @@ try {
         break
     }
 
-    # Need to check if there's a deployment prefix, and if not, set it to AzLDW01
-    if (!($deploymentPrefix)) {
-        $deploymentPrefix = "AzLDW01"
-        Write-Host "No deployment prefix provided. Using default value of $deploymentPrefix" -ForegroundColor Green
-    }
-    else {
-        Write-Host "Using deployment prefix of $deploymentPrefix" -ForegroundColor Green
-    }
-
     # Need to ensure that $domainName is provided, and that it is a valid domain name, with a maximum of 1 subdomain
     if (!($domainName)) {
         $pattern = "^(?!:\/\/)(?!-)([a-zA-Z0-9-_]+\.)?[a-zA-Z0-9][a-zA-Z0-9-_]+\.[a-zA-Z]{2,11}?$"
@@ -311,6 +302,32 @@ try {
             exit
         }
     }
+
+    # Need to check if there's a deployment prefix, and if not, set it to AzLDW01
+    if (!($deploymentPrefix)) {
+        $deploymentPrefix = "AzLDW01"
+        Write-Host "No deployment prefix provided. Using default value of $deploymentPrefix" -ForegroundColor Green
+    }
+    else {
+        Write-Host "Using deployment prefix of $deploymentPrefix" -ForegroundColor Green
+    }
+
+    # Create a Do While loop to check if the deployment prefix is already in use by checking names of existing VMs
+    Do {
+        $existingVMs = Get-VM | Where-Object { $_.Name -like "$($deploymentPrefix)*" }
+        if ($existingVMs) {
+            Write-Host "The deployment prefix $($deploymentPrefix) is already in use by the following VMs:" -ForegroundColor Yellow
+            foreach ($vm in $existingVMs) {
+                Write-Host "$($vm.Name)"
+            }
+            $deploymentPrefix = Read-Host "Please enter a new deployment prefix (or Q to exit)"
+            if ($deploymentPrefix -eq "Q") {
+                Write-Host 'Exiting...' -ForegroundColor Red
+                Start-Sleep -Seconds 5
+                break 
+            }
+        }
+    } while ($existingVMs)
 
     if (!($AutoDownloadWSiso)) {
         if (!($WindowsServerIsoPath)) {
