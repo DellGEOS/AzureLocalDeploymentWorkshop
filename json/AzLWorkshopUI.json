@@ -488,7 +488,7 @@
                                     "type": "Microsoft.Common.TextBlock",
                                     "visible": true,
                                     "options": {
-                                        "text": "Choose whether you wish to install Windows Admin Center in your Azure Local environment. This can be used to perform additional management tasks against your Azure Local machines and instance.",
+                                        "text": "Choose whether you wish to deploy a VM to host Windows Admin Center in your Azure Local environment. This can be used to perform additional management tasks against your Azure Local machines and instance.",
                                         "link": {
                                             "label": "",
                                             "uri": ""
@@ -498,10 +498,10 @@
                                 {
                                     "name": "installWAC",
                                     "type": "Microsoft.Common.DropDown",
-                                    "label": "Install Windows Admin Center",
+                                    "label": "Deploy Windows Admin Center VM",
                                     "subLabel": "",
                                     "defaultValue": "Yes",
-                                    "toolTip": "Select Yes to install Windows Admin Center in your Azure Local environment.",
+                                    "toolTip": "Select Yes to deploy a Windows Admin Center VM, and pre-download the latest Windows Admin Center software in your Azure Local environment.",
                                     "constraints": {
                                         "required": true,
                                         "allowedValues": [
