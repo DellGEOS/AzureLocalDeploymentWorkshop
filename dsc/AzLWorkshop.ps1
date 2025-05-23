@@ -1636,6 +1636,8 @@ configuration AzLWorkshop
                                         Start-Sleep -Seconds 5
                                         $attempt++
                                     } while ($dhcpEnabledAdapters.Count -gt 0 -and $attempt -lt $maxAttempts)
+                                    # Release the DHCP lease on all NICs
+                                    ipconfig /release
                                 }
                             }
                             $success = $true
