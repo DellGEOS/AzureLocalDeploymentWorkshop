@@ -1609,11 +1609,22 @@ configuration AzLWorkshop
                                     # Enable PING through the firewall
                                     Enable-NetFirewallRule -displayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
                                     # Get all NICs and check if DHCP is enabled, and if so, disable it
-                                    Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Enabled' | ForEach-Object {
-                                        Write-Verbose "$($vm.Name): Disabling DHCP on $($_.InterfaceAlias)" -Verbose
-                                        Set-NetIPInterface -InterfaceAlias $_.InterfaceAlias -Dhcp Disabled
-                                        Write-Verbose "$($vm.Name): Disabling DHCP on $($_.InterfaceAlias) - Done" -Verbose
-                                    }
+                                    # Loop until all network adapters have DHCP disabled
+                                    $maxAttempts = 5
+                                    $attempt = 0
+                                    do {
+                                        $dhcpEnabledAdapters = Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Enabled'
+                                        if ($dhcpEnabledAdapters.Count -gt 0) {
+                                            Write-Verbose "Disabling DHCP on $($vm.Name)" -Verbose
+                                            $dhcpEnabledAdapters | Set-NetIPInterface -Dhcp Disabled -Verbose
+                                            Write-Verbose "DHCP disabled on $($vm.Name)" -Verbose
+                                        }
+                                        else {
+                                            Write-Verbose "All network adapters have DHCP disabled on $($vm.Name)" -Verbose
+                                        }
+                                        Start-Sleep -Seconds 5
+                                        $attempt++
+                                    } while ($dhcpEnabledAdapters.Count -gt 0 -and $attempt -lt $maxAttempts)
                                 }
                             }
                             $success = $true
