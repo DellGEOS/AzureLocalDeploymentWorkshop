@@ -1550,10 +1550,21 @@ configuration AzLWorkshop
                             Get-VM -Name "$Using:vmPrefix-AzL*" | ForEach-Object {
                                 Write-Verbose "Updating NIC names for $($_.Name)" -Verbose
                                 Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock {
-                                    foreach ($N in (Get-NetAdapterAdvancedProperty -DisplayName "Hyper-V Network Adapter Name" | Where-Object DisplayValue -NotLike "")) {
-                                        $N | Rename-NetAdapter -NewName $n.DisplayValue -Verbose
-                                        Write-Verbose "Renamed NIC with MAC: $($N.MacAddress) to $($n.DisplayValue)" -Verbose
-                                    }
+                                    # Create a while loop to check if there are NICs with a name like "Ethernet*" and rename them
+                                    $maxRetries = 5
+                                    $retryCount = 0
+                                    do {
+                                        $adapters = Get-NetAdapter -Name "Ethernet*" -ErrorAction SilentlyContinue
+                                        if ($adapters.Count -gt 0) {
+                                            Write-Verbose "Renaming NICs with names like 'Ethernet' on $($_.Name)" -Verbose
+                                            foreach ($N in (Get-NetAdapterAdvancedProperty -DisplayName "Hyper-V Network Adapter Name" | Where-Object DisplayValue -NotLike "")) {
+                                                $N | Rename-NetAdapter -NewName $N.DisplayValue -Verbose
+                                                Write-Verbose "Renamed NIC with MAC: $($N.MacAddress) to $($N.DisplayValue)" -Verbose
+                                            }
+                                            Start-Sleep -Seconds 10
+                                        }
+                                        $retryCount++
+                                    } while (($adapters.Count -gt 0) -and ($retryCount -lt $maxRetries))
                                 }
                             }
                             $success = $true
