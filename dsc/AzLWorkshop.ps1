@@ -1504,8 +1504,8 @@ configuration AzLWorkshop
                             $success = $true
                             Write-Verbose "AzL VMs started successfully." -Verbose
                             # Wait 240 seconds for the VMs to come online
-                            Write-Verbose "Waiting for 240 seconds for the VMs to come online..." -Verbose
-                            Start-Sleep -Seconds 240
+                            Write-Verbose "Waiting for 5 minutes for the VMs to come online..." -Verbose
+                            Start-Sleep -Seconds 300
                         }
                         catch {
                             Write-Warning "Failed to start AzL VMs. Error: $_" -Verbose
@@ -1624,24 +1624,48 @@ configuration AzLWorkshop
                                     $maxAttempts = 5
                                     $attempt = 0
                                     do {
-                                        $dhcpEnabledAdapters = Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Enabled'
-                                        if ($dhcpEnabledAdapters.Count -gt 0) {
+                                        # Wait until network interfaces are available before proceeding
+                                        $maxWait = 12 # Wait up to 2 minutes (12 * 10s)
+                                        $waitCount = 0
+                                        do {
+                                            $totalInterfaces = Get-NetAdapter | Get-NetIPInterface
+                                            if (-not $totalInterfaces -or $totalInterfaces.Count -eq 0) {
+                                                Write-Verbose "No network interfaces found on $($vm.Name). VM may not be ready. Waiting before retrying..." -Verbose
+                                                Start-Sleep -Seconds 10
+                                                $waitCount++
+                                            }
+                                        } while ((-not $totalInterfaces -or $totalInterfaces.Count -eq 0) -and $waitCount -lt $maxWait)
+                                        if (-not $totalInterfaces -or $totalInterfaces.Count -eq 0) {
+                                            Write-Verbose "Still no network interfaces found on $($vm.Name) after waiting. Skipping this VM." -Verbose
+                                            $attempt++
+                                            continue
+                                        }
+                                        # Once network interfaces are available, check if DHCP is disabled on all adapters
+                                        $dhcpDisabledAdapters = Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Disabled'
+                                        # if the number of interfaces is not equal to the number of DHCP disabled adapters, then DHCP is still enabled on some adapters and need to be disabled
+                                        if ($totalInterfaces.Count -ne $dhcpDisabledAdapters.Count) {
                                             Write-Verbose "Disabling DHCP on $($vm.Name)" -Verbose
-                                            $dhcpEnabledAdapters | Set-NetIPInterface -Dhcp Disabled -Verbose
+                                            # Disable DHCP on all NICs
+                                            Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Enabled' | Set-NetIPInterface -Dhcp Disabled
                                             Write-Verbose "DHCP disabled on $($vm.Name)" -Verbose
+                                            # Check if DHCP is still enabled on any adapters
+                                            $dhcpEnabledAdapters = Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Enabled'
+                                            if ($dhcpEnabledAdapters.Count -gt 0) {
+                                                Write-Verbose "DHCP is still enabled on some adapters on $($vm.Name). Retrying..." -Verbose
+                                            }
+                                            else {
+                                                Write-Verbose "All network adapters have DHCP disabled on $($vm.Name)" -Verbose
+                                            }
+                                            Start-Sleep -Seconds 5
+                                            $attempt++
                                         }
-                                        else {
-                                            Write-Verbose "All network adapters have DHCP disabled on $($vm.Name)" -Verbose
-                                        }
-                                        Start-Sleep -Seconds 5
-                                        $attempt++
                                     } while ($dhcpEnabledAdapters.Count -gt 0 -and $attempt -lt $maxAttempts)
                                     # Release the DHCP lease on all NICs
-                                    ipconfig /release
+                                    ipconfig /release | Out-Null
                                 }
+                                $success = $true
+                                Write-Verbose "DHCP successfully disabled on all VMs" -Verbose
                             }
-                            $success = $true
-                            Write-Verbose "DHCP successfully disabled on all VMs" -Verbose
                         }
                         catch {
                             Write-Warning "Failed to disable DHCP on $($vm.Name). Error: $_" -Verbose
@@ -1749,8 +1773,10 @@ configuration AzLWorkshop
                             # Unpack the returned values
                             $DhcpScope = $returnedValues[0]
                             $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
-                            $subnetMask = @($returnedValues[1]) # Ensure it is treated as a collection
-                            $gateway = @($returnedValues[2])    # Ensure it is treated as a collection
+                            $subnetMask = $returnedValues[1] # Ensure it is treated as a collection
+                            # Convert subnet mask to prefix length
+                            $subnetPrefix = ((($subnetMask -split '\.').ForEach({ [Convert]::ToString($_, 2).PadLeft(8, '0') }) -join '').ToCharArray() -eq '1').count
+                            $gateway = $returnedValues[2]    # Ensure it is treated as a collection
                             $dnsServers = @($returnedValues[3]) # Ensure it is treated as a collection
                             $vms = $Using:vms
 
@@ -1787,45 +1813,24 @@ configuration AzLWorkshop
                                 $vmIpAddress = @()
                                 $vmIpAddress = @($AzLIpMap[$vm])
 
-                                Write-Verbose "Setting static IP for $vmName to $($vmIpAddress)" -Verbose
-
-                                $networkAdapter = Get-VMNetworkAdapter -VMName $vmName -Name "Management1"
-                                $vmToUpdate = Get-CimInstance -Namespace "root\virtualization\v2" -ClassName "Msvm_ComputerSystem" | Where-Object ElementName -eq $networkAdapter.VMName
-                                $vmSettings = Get-CimAssociatedInstance -InputObject $vmToUpdate -ResultClassName "Msvm_VirtualSystemSettingData" | Where-Object VirtualSystemType -EQ "Microsoft:Hyper-V:System:Realized"
-                                $vmNetAdapters = Get-CimAssociatedInstance -InputObject $vmSettings -ResultClassName "Msvm_SyntheticEthernetPortSettingData"
-            
-                                $networkAdapterConfiguration = @()
-                                foreach ($netAdapter in $vmNetAdapters) {
-                                    if ($netAdapter.ElementName -eq $networkAdapter.Name) {
-                                        $networkAdapterConfiguration = Get-CimAssociatedInstance -InputObject $netAdapter -ResultClassName "Msvm_GuestNetworkAdapterConfiguration"
-                                        break
+                                $scriptCredential = New-Object System.Management.Automation.PSCredential (".\Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                                Invoke-Command -VMName $vmName -Credential $scriptCredential -ArgumentList $vmIpAddress, $subnetPrefix, $gateway, $dnsServers, $vmName -ScriptBlock {
+                                    param ($vmIpAddress, $subnetPrefix, $gateway, $dnsServers, $vmName)
+                                    Write-Verbose "Setting static IP for $($vmName) to $($vmIpAddress)" -Verbose
+                                    # Set the static IP address for Interface Alias "Management1"
+                                    # Check if Management1 already has the desired static IP
+                                    $existingIp = Get-NetIPAddress -InterfaceAlias "Management1" -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -eq $vmIpAddress }
+                                    if (-not $existingIp) {
+                                        New-NetIPAddress -InterfaceAlias "Management1" -IPAddress $vmIpAddress -PrefixLength $subnetPrefix -DefaultGateway $gateway -Verbose
                                     }
+                                    else {
+                                        Write-Verbose "Management1 already has IP $vmIpAddress assigned." -Verbose
+                                    }
+                                    # Set the DNS servers
+                                    Get-NetAdapter | Set-DnsClientServerAddress -ResetServerAddresses
+                                    Set-DnsClientServerAddress -InterfaceAlias "Management1" -ServerAddresses $dnsServers -Verbose
                                 }
-            
-                                $networkAdapterConfiguration.PSBase.CimInstanceProperties["IPAddresses"].Value = $vmIpAddress
-                                $networkAdapterConfiguration.PSBase.CimInstanceProperties["Subnets"].Value = $subnetMask
-                                $networkAdapterConfiguration.PSBase.CimInstanceProperties["DefaultGateways"].Value = $gateway
-                                $networkAdapterConfiguration.PSBase.CimInstanceProperties["DNSServers"].Value = $dnsServers
-                                $networkAdapterConfiguration.PSBase.CimInstanceProperties["ProtocolIFType"].Value = 4096
-                                $networkAdapterConfiguration.PSBase.CimInstanceProperties["DHCPEnabled"].Value = $false
-            
-                                $cimSerializer = [Microsoft.Management.Infrastructure.Serialization.CimSerializer]::Create()
-                                $serializedInstance = $cimSerializer.Serialize($networkAdapterConfiguration, [Microsoft.Management.Infrastructure.Serialization.InstanceSerializationOptions]::None)
-                                $serializedInstanceString = [System.Text.Encoding]::Unicode.GetString($serializedInstance)
-            
-                                $service = Get-CimInstance -ClassName "Msvm_VirtualSystemManagementService" -Namespace "root\virtualization\v2"
-                                $setIp = Invoke-CimMethod -InputObject $service -MethodName "SetGuestNetworkAdapterConfiguration" -Arguments @{
-                                    ComputerSystem       = $vmToUpdate
-                                    NetworkConfiguration = @($serializedInstanceString)
-                                }
-                                if ($setIp.ReturnValue -eq 0) {
-                                    # completed
-                                    Write-Verbose "Management1 IP on $vmName to $vmIpAddress" -Verbose
-                                }
-                                else {
-                                    # unexpected response
-                                    $setIp
-                                }
+                                Write-Verbose "Static IP set for $vmName to $($vmIpAddress)" -Verbose
                             }
                             $success = $true
                             Write-Verbose "All VMs have been assigned static IP addresses" -Verbose
