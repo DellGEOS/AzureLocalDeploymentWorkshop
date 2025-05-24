@@ -192,6 +192,7 @@ configuration AzLWorkshop
             # Set the paths for the workshop
             $mslabLocalPath = "$workshopPath\mslab.zip"
             $labConfigPath = "$workshopPath\LabConfig.ps1"
+            $deployFilePath = "$workshopPath\3_Deploy.ps1"
             $createParentDisksPath = "$workshopPath\2_CreateParentDisks.ps1"
             $parentDiskPath = "$workshopPath\ParentDisks"
             $updatePath = "$parentDiskPath\Updates"
@@ -495,7 +496,7 @@ configuration AzLWorkshop
 
                     # customize the lab config file based on WAC being installed or not
                     if ($Using:installWAC -eq "Yes") {
-                        $labConfigFile = $labConfigFile.Replace("<<installWAC>>", '$LabConfig.VMs += @{ VMName = ''<<VmPrefix>>-WAC'' ; ParentVHD = ''WinSvrCore_G2.vhdx'' ; MGMTNICs = 1 }')
+                        $labConfigFile = $labConfigFile.Replace("<<installWAC>>", '$LabConfig.VMs += @{ VMName = ''WAC'' ; ParentVHD = ''WinSvrCore_G2.vhdx'' ; MGMTNICs = 1 }')
                     }
                     else {
                         $labConfigFile = $labConfigFile.Replace("<<installWAC>>", '')
@@ -521,6 +522,25 @@ configuration AzLWorkshop
                     return $state.Result
                 }
                 DependsOn  = "[Script]Replace LabConfig"
+            }
+
+            Write-Verbose "Editing 3_Deploy.ps1 file to ensure guest OS names match VM names" -Verbose
+            Script "Edit 3_Deploy.ps1" {
+                GetScript  = {
+                    $result = !(Test-Path -Path "$Using:deployFilePath")
+                    return @{ 'Result' = $result }
+                }
+                SetScript  = {
+                    $deployFile = Get-Content -Path "$Using:deployFilePath"
+                    $deployFile = $deployFile.Replace('$Name=$VMConfig.VMName', '$Name = $VMName')
+                    $deployFile = $deployFile.Replace('PullClientConfig -ComputerName $VMConfig.VMName', 'PullClientConfig -ComputerName $VMName')
+                    Out-File -FilePath "$Using:deployFilePath" -InputObject $deployFile -Force
+                }
+                TestScript = {
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "[Script]Edit LabConfig"
             }
 
             Script "Download Windows Server ISO" {
@@ -849,7 +869,7 @@ configuration AzLWorkshop
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
-                DependsOn  = "[Script]Edit LabConfig", "[Script]CreateAzLocalDisk"
+                DependsOn  = "[Script]Edit LabConfig", "[Script]CreateAzLocalDisk", "[Script]Edit 3_Deploy.ps1"
             }
 
             #######################################################################
