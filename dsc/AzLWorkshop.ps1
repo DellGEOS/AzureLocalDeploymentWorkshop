@@ -1037,7 +1037,7 @@ configuration AzLWorkshop
             }
 
             #######################################################################
-            ## Update DHCP Scope and set as disabled
+            ## Update DHCP Scope
             #######################################################################
 
             Script "UpdateDhcpScope" {
@@ -1566,6 +1566,103 @@ configuration AzLWorkshop
             }
 
             #######################################################################
+            ## Disable DHCP on the AzL VMs
+            #######################################################################
+
+            Write-Verbose "Disabling DHCP on the AzL VMs" -Verbose
+
+            Script "DisableDhcpOnVMs" {
+                GetScript  = {
+                    $result = $false
+                    return @{ 'Result' = $result }
+                }
+                SetScript  = {
+                    $ErrorActionPreference = "SilentlyContinue"
+                    $retryCount = 0
+                    $success = $false
+                    do {
+                        try {
+                            Write-Verbose "Attempt $($retryCount + 1) to disable DHCP on the VMs" -Verbose
+                            # Get all VMs that are not the DC and disable DHCP on them
+                            $vmName = Get-VM | Where-Object { $_.Name -like "$Using:vmPrefix-AzL*" }
+                            Write-Verbose "Disabling DHCP on the following VMs: $($vmName.Name)" -Verbose
+                            ForEach ($vm in $vmName) {
+                                Write-Verbose "Disabling DHCP on $($vm.Name)" -Verbose
+                                $scriptCredential = New-Object System.Management.Automation.PSCredential (".\Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                                Invoke-Command -VMName $vm.Name -Credential $scriptCredential -ArgumentList $vm -ScriptBlock {
+                                    param ($vm)
+                                    Write-Verbose "Enable ping through the firewall on $($vm.Name)" -Verbose
+                                    # Enable PING through the firewall
+                                    Enable-NetFirewallRule -displayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
+                                    # Get all NICs and check if DHCP is enabled, and if so, disable it
+                                    # Loop until all network adapters have DHCP disabled
+                                    $maxAttempts = 5
+                                    $attempt = 0
+                                    do {
+                                        # Wait until network interfaces are available before proceeding
+                                        $maxWait = 12 # Wait up to 2 minutes (12 * 10s)
+                                        $waitCount = 0
+                                        do {
+                                            $totalInterfaces = Get-NetAdapter | Get-NetIPInterface
+                                            if (-not $totalInterfaces -or $totalInterfaces.Count -eq 0) {
+                                                Write-Verbose "No network interfaces found on $($vm.Name). VM may not be ready. Waiting before retrying..." -Verbose
+                                                Start-Sleep -Seconds 10
+                                                $waitCount++
+                                            }
+                                        } while ((-not $totalInterfaces -or $totalInterfaces.Count -eq 0) -and $waitCount -lt $maxWait)
+                                        if (-not $totalInterfaces -or $totalInterfaces.Count -eq 0) {
+                                            Write-Verbose "Still no network interfaces found on $($vm.Name) after waiting. Skipping this VM." -Verbose
+                                            $attempt++
+                                            continue
+                                        }
+                                        # Once network interfaces are available, check if DHCP is disabled on all adapters
+                                        $dhcpDisabledAdapters = Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Disabled'
+                                        # if the number of interfaces is not equal to the number of DHCP disabled adapters, then DHCP is still enabled on some adapters and need to be disabled
+                                        if ($totalInterfaces.Count -ne $dhcpDisabledAdapters.Count) {
+                                            Write-Verbose "Disabling DHCP on $($vm.Name)" -Verbose
+                                            # Disable DHCP on all NICs
+                                            Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Enabled' | Set-NetIPInterface -Dhcp Disabled
+                                            Write-Verbose "DHCP disabled on $($vm.Name)" -Verbose
+                                            # Check if DHCP is still enabled on any adapters
+                                            $dhcpEnabledAdapters = Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Enabled'
+                                            if ($dhcpEnabledAdapters.Count -gt 0) {
+                                                Write-Verbose "DHCP is still enabled on some adapters on $($vm.Name). Retrying..." -Verbose
+                                            }
+                                            else {
+                                                Write-Verbose "All network adapters have DHCP disabled on $($vm.Name)" -Verbose
+                                            }
+                                            Start-Sleep -Seconds 5
+                                            $attempt++
+                                        }
+                                    } while ($dhcpEnabledAdapters.Count -gt 0 -and $attempt -lt $maxAttempts)
+                                    # Release the DHCP lease on all NICs
+                                    ipconfig /release | Out-Null
+                                }
+                                $success = $true
+                                Write-Verbose "DHCP successfully disabled on all VMs" -Verbose
+                            }
+                        }
+                        catch {
+                            Write-Warning "Failed to disable DHCP on $($vm.Name). Error: $_" -Verbose
+                            $retryCount++
+                            if ($retryCount -lt $MaxRetries) {
+                                Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
+                                Start-Sleep -Seconds $RetryDelay
+                            }
+                            else {
+                                Throw "Maximum retries ($MaxRetries) reached. Unable to disable DHCP on $($vm.Name)."
+                            }
+                        }
+                    } while (-not $success -and $retryCount -lt $MaxRetries)
+                }
+                TestScript = {
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "[Script]StartVMs"
+            }
+
+            #######################################################################
             ## Configuring NIC Names for the VMs
             #######################################################################
 
@@ -1625,7 +1722,7 @@ configuration AzLWorkshop
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
-                DependsOn  = "[Script]StartVMs"
+                DependsOn  = "[Script]DisableDhcpOnVMs"
             }
 
             #######################################################################
