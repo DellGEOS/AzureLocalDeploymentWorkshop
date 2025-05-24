@@ -1099,6 +1099,11 @@ configuration AzLWorkshop
                             
                             # If WAC VM has been deployed, grab the MAC address of the VM and set a reservation for it
                             $wacVm = Get-VM -Name "$Using:vmPrefix-WAC" -ErrorAction SilentlyContinue
+                            # If the WAC VM isn't running, start it
+                            if ($wacVm -and $wacVm.State -ne 'Running') {
+                                Write-Verbose "Starting WAC VM" -Verbose
+                                Start-VM -Name "$($wacVm.Name)" -Verbose
+                            }
                             if ($wacVm) {
                                 $wacMac = ($wacVm | Get-VMNetworkAdapter -Name "Management1").MacAddress
                                 $formattedMac = ($wacMac -replace '..', '$&-').TrimEnd('-')
@@ -1108,7 +1113,7 @@ configuration AzLWorkshop
                                     $scope = Get-DhcpServerv4Scope
                                     $prefix = ($scope.StartRange -split '\.')[0..2] -join '.'
                                     $ip = "$prefix.10"
-                                    Add-DhcpServerv4Reservation -ScopeId $scope.ScopeId -IPAddress $ip -ClientId $formattedMac -Description "WAC VM Reservation"
+                                    Add-DhcpServerv4Reservation -Name "Windows Admin Center" -ScopeId $scope.ScopeId -IPAddress $ip -ClientId $formattedMac -Description "WAC VM Reservation"
                                 }
                             }
                             $success = $true
