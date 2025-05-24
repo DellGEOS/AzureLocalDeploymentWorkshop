@@ -492,6 +492,15 @@ configuration AzLWorkshop
                 }
                 SetScript  = {
                     $labConfigFile = Get-Content -Path "$Using:labConfigPath"
+
+                    # customize the lab config file based on WAC being installed or not
+                    if ($Using:installWAC -eq "Yes") {
+                        $labConfigFile = $labConfigFile.Replace("<<installWAC>>", '$LabConfig.VMs += @{ VMName = ''<<VmPrefix>>-WAC'' ; ParentVHD = ''WinSvrCore_G2.vhdx'' ; MGMTNICs = 1 }')
+                    }
+                    else {
+                        $labConfigFile = $labConfigFile.Replace("<<installWAC>>", '')
+                    }
+
                     $labConfigFile = $labConfigFile.Replace("<<DomainAdminName>>", $Using:domainAdminName)
                     $labConfigFile = $labConfigFile.Replace("<<AdminPassword>>", $Using:msLabPassword)
                     $labConfigFile = $labConfigFile.Replace("<<DomainNetBios>>", $Using:domainNetBios)
@@ -505,14 +514,6 @@ configuration AzLWorkshop
                     $labConfigFile = $labConfigFile.Replace("<<customDNSForwarders>>", $Using:customDNSForwarders)
                     $labConfigFile = $labConfigFile.Replace("<<vSwitchName>>", $Using:vSwitchName)
                     $labConfigFile = $labConfigFile.Replace("<<allowedVlans>>", $Using:allowedVlans)
-
-                    # customize the lab config file based on WAC being installed or not
-                    if ($Using:installWAC -eq "Yes") {
-                        $labConfigFile = $labConfigFile.Replace("<<installWAC>>", '$LabConfig.VMs += @{ VMName = ''WAC'' ; ParentVHD = ''WinSvrCore_G2.vhdx'' ; MGMTNICs = 1 }')
-                    }
-                    else {
-                        $labConfigFile = $labConfigFile.Replace("<<installWAC>>", '')
-                    }
                     Out-File -FilePath "$Using:labConfigPath" -InputObject $labConfigFile -Force
                 }
                 TestScript = {
@@ -902,20 +903,19 @@ configuration AzLWorkshop
             }
 
             #######################################################################
-            ## Start Domain Controller and Windows Admin Center
+            ## Start Domain Controller
             #######################################################################
 
-            Script "Start DC and WAC" {
+            Script "Start DC" {
                 GetScript  = {
-                    Write-Verbose "Checking if Domain Controller and Windows Admin Center are running" -Verbose
-                    $result = (Get-VM -Name "$Using:vmPrefix-DC").State -eq 'Running' -and (Get-VM -Name "$Using:vmPrefix-WAC").State -eq 'Running'
+                    Write-Verbose "Checking if Domain Controller is running" -Verbose
+                    $result = (Get-VM -Name "$Using:vmPrefix-DC").State -eq 'Running'
                     return @{ 'Result' = $result }
                 }
                 SetScript  = {
-                    Write-Verbose "Starting Domain Controller and Windows Admin Center" -Verbose
+                    Write-Verbose "Starting Domain Controller" -Verbose
                     Start-VM -Name "$Using:vmPrefix-DC"
-                    Start-VM -Name "$Using:vmPrefix-WAC"
-                    Write-Verbose "Domain Controller and Windows Admin Center started" -Verbose
+                    Write-Verbose "Domain Controller started" -Verbose
                     # Wait 120 seconds for the VMs to start fully
                     Start-Sleep -Seconds 120
                 }
@@ -957,45 +957,7 @@ configuration AzLWorkshop
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
-                DependsOn  = "[Script]MSLab CreateParentDisks"
-            }
-
-            #######################################################################
-            ## Configure the Windows Admin Center VM - Download only
-            #######################################################################
-
-            # If the user has chosen to deploy WAC, need to trigger an installation of the latest WAC build
-            if ($installWAC -eq 'Yes') {
-                Script "Download WAC" {
-                    GetScript  = {
-                        $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                        $result = (Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
-                                Write-Verbose "Checking if Windows Admin Center has been downloaded..." -Verbose
-                                [bool] (Test-Path -Path "C:\WindowsAdminCenter.exe")
-                            })
-
-                        if ($result) {
-                            Write-Verbose "Windows Admin Center has already been downloaded." -Verbose
-                        }
-                        return @{ 'Result' = $result }
-                    }
-                    SetScript  = {
-                        $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
-                            $ProgressPreference = 'SilentlyContinue'
-                            Write-Verbose "Downloading Windows Admin Center..." -Verbose
-                            Invoke-WebRequest -Uri 'https://aka.ms/WACDownload' -OutFile "C:\WindowsAdminCenter.exe" -UseBasicParsing
-                        }
-                    }
-                    TestScript = {
-                        $state = [scriptblock]::Create($GetScript).Invoke()
-                        return $state.Result
-                    }
-                    DependsOn  = "[Script]MSLab CreateParentDisks"
-                }
-            }
-            else { 
-                Write-Verbose "Skipping Windows Admin Center download as it was not selected." -Verbose
+                DependsOn  = "[Script]Start DC"
             }
 
             #######################################################################
@@ -1072,6 +1034,81 @@ configuration AzLWorkshop
                     return $state.Result
                 }
                 DependsOn  = "[Script]Enable RDP on DC"
+            }
+
+            #######################################################################
+            ## Update DHCP Scope and set as disabled
+            #######################################################################
+
+            Script "UpdateDhcpScope" {
+                GetScript  = {
+                    $result = $false
+                    return @{ 'Result' = $result }
+                }
+                SetScript  = {
+                    $ErrorActionPreference = "SilentlyContinue"
+                    $retryCount = 0
+                    $success = $false
+                    do {
+                        try {
+                            Write-Verbose "Attempt $($retryCount + 1) to update DHCP scope" -Verbose
+                            # Get the scope from DHCP by running an Invoke-Command against the DC VM
+                            $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                            Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
+                                $DhcpScope = Get-DhcpServerv4Scope
+                                Write-Verbose "DHCP Scope: $DhcpScope" -Verbose
+                                $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
+                                Write-Verbose "Short DHCP Scope: $shortDhcpScope" -Verbose
+                                # Start the scope at 10 with an exclusion range from 11-49 to allow for Deployments with SDN optional services
+                                # As per here: https://learn.microsoft.com/en-us/azure/azure-local/plan/three-node-ip-requirements?#deployments-with-sdn-optional-services
+                                $newIpStartRange = ($shortDhcpScope + ".10")
+                                $exclusionStatRange = ($shortDhcpScope + ".11")
+                                $exclusionEndRange = ($shortDhcpScope + ".49")
+                                Write-Verbose "Updating DHCP scope to start at $newIpStartRange" -Verbose
+                                Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $DhcpScope.EndRange
+                                Write-Verbose "DHCP scope updated to start at $newIpStartRange" -Verbose
+                                # Add an exclusion range for the Azure Local VMs and additional services
+                                Write-Verbose "Adding exclusion range from $exclusionStatRange to $exclusionEndRange" -Verbose
+                                Add-Dhcpserverv4ExclusionRange -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $exclusionEndRange
+                                Get-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId | Where-Object IPAddress -like "$shortDhcpScope*" | ForEach-Object {
+                                    Remove-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId -Confirm:$false -ErrorAction SilentlyContinue
+                                    Write-Verbose "Removed DHCP lease for IP address $($_.IPAddress)" -Verbose
+                                }
+                                # If WAC VM has been deployed, grab the MAC address of the VM and set a reservation for it
+                                if (Get-VM -Name "$Using:vmPrefix-WAC" -ErrorAction SilentlyContinue) {
+                                    $wacVm = Get-VM -Name "$Using:vmPrefix-WAC"
+                                    $wacMacAddress = ($wacVm.NetworkAdapters | Where-Object Name -eq "Management1").MacAddress
+                                    # Need to convert the MAC address to the format required by DHCP
+                                    $formattedMac = ""
+                                    for ($i = 0; $i -lt $wacMacAddress.Length; $i += 2) {
+                                        $formattedMac += $wacMacAddress.Substring($i, 2) + "-"
+                                    }
+                                    $formattedMac = $formattedMac.TrimEnd('-')
+                                    Write-Verbose "Setting DHCP reservation for WAC VM with MAC address $wacMacAddress" -Verbose
+                                    Add-DhcpServerv4Reservation -ScopeId $DhcpScope.ScopeId -IPAddress $newIpStartRange -ClientId $formattedMac -Description "WAC VM Reservation"
+                                }
+                            }
+                            $success = $true
+                            Write-Verbose "DHCP scope successfully updated" -Verbose
+                        }
+                        catch {
+                            Write-Warning "Failed to configure DHCP on $Using:vmPrefix-DC. Error: $_" -Verbose
+                            $retryCount++
+                            if ($retryCount -lt $MaxRetries) {
+                                Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
+                                Start-Sleep -Seconds $RetryDelay
+                            }
+                            else {
+                                Throw "Maximum retries ($MaxRetries) reached. Unable to configure DHCP scope on $Using:vmPrefix-DC."
+                            }
+                        }
+                    } while (-not $success -and $retryCount -lt $MaxRetries)
+                }
+                TestScript = {
+                    $state = [scriptblock]::Create($GetScript).Invoke()
+                    return $state.Result
+                }
+                DependsOn  = "[Script]Update DC"
             }
 
             #######################################################################
@@ -1483,12 +1520,12 @@ configuration AzLWorkshop
             }
 
             #######################################################################
-            ## Start the AzL VMs and wait for them to come online
+            ## Start the AzL and WAC (if created) VMs and wait for them to come online
             #######################################################################
 
-            Write-Verbose "Starting the AzL VMs and waiting for them to come online" -Verbose
+            Write-Verbose "Starting the AzL and WAC (if created during deployment) VMs and wait for them to come online" -Verbose
 
-            Script "StartAzLVMs" {
+            Script "StartVMs" {
                 GetScript  = {
                     $result = $false
                     return @{ 'Result' = $result }
@@ -1499,23 +1536,24 @@ configuration AzLWorkshop
                     $success = $false
                     do {
                         try {
-                            Write-Verbose "Attempt $($retryCount + 1) to Start the AzL VMs..." -Verbose
-                            Get-VM -Name "$Using:vmPrefix-AzL*" | Start-VM -Verbose
+                            Write-Verbose "Attempt $($retryCount + 1) to Start the VMs..." -Verbose
+                            # Get the list of VMs where the name starts with the prefix and is not the DC
+                            Get-VM | Where-Object { ($_.Name -notlike "$Using:vmPrefix-DC") -and ($_.Name -like "$Using:vmPrefix*") } | Start-VM -Verbose
                             $success = $true
-                            Write-Verbose "AzL VMs started successfully." -Verbose
-                            # Wait 240 seconds for the VMs to come online
+                            Write-Verbose "VMs started successfully." -Verbose
+                            # Wait 300 seconds for the VMs to come online
                             Write-Verbose "Waiting for 5 minutes for the VMs to come online..." -Verbose
                             Start-Sleep -Seconds 300
                         }
                         catch {
-                            Write-Warning "Failed to start AzL VMs. Error: $_" -Verbose
+                            Write-Warning "Failed to start VMs. Error: $_" -Verbose
                             $retryCount++
                             if ($retryCount -lt $MaxRetries) {
                                 Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
                                 Start-Sleep -Seconds $RetryDelay
                             }
                             else {
-                                Throw "Maximum retries ($MaxRetries) reached. Unable to start AzL VMs."
+                                Throw "Maximum retries ($MaxRetries) reached. Unable to start VMs."
                             }
                         }
                     } while (-not $success -and $retryCount -lt $MaxRetries)
@@ -1528,13 +1566,13 @@ configuration AzLWorkshop
             }
 
             #######################################################################
-            ## Configuring NIC Names for the AzL VMs
+            ## Configuring NIC Names for the VMs
             #######################################################################
 
-            Write-Verbose "Configuring NIC Names for the AzL VMs" -Verbose
+            Write-Verbose "Configuring NIC Names for the VMs" -Verbose
 
-            # Update all the Nic Names in the AzL VMs to make it easier for configuring the networking during instance deployment
-            Script "UpdateAzLNicNames" {
+            # Update all the Nic Names in the VMs to make it easier for configuring the networking during instance deployment
+            Script "UpdateNicNames" {
                 GetScript  = {
                     $result = $false
                     return @{ 'Result' = $result }
@@ -1547,7 +1585,7 @@ configuration AzLWorkshop
                     do {
                         try {
                             Write-Verbose "Attempt $($retryCount + 1) to set NIC names for Azure Local VMs..." -Verbose
-                            Get-VM -Name "$Using:vmPrefix-AzL*" | ForEach-Object {
+                            Get-VM | Where-Object { ($_.Name -notlike "$Using:vmPrefix-DC") -and ($_.Name -like "$Using:vmPrefix*") } | ForEach-Object {
                                 Write-Verbose "Updating NIC names for $($_.Name)" -Verbose
                                 Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock {
                                     # Create a while loop to check if there are NICs with a name like "Ethernet*" and rename them
@@ -1568,7 +1606,7 @@ configuration AzLWorkshop
                                 }
                             }
                             $success = $true
-                            Write-Verbose "NIC names set successfully for Azure Local VMs." -Verbose
+                            Write-Verbose "NIC names set successfully for VMs." -Verbose
                         }
                         catch {
                             Write-Warning "Failed to set NIC names on $($_.Name). Error: $_" -Verbose
@@ -1587,359 +1625,45 @@ configuration AzLWorkshop
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
-                DependsOn  = "[Script]StartAzLVMs"
+                DependsOn  = "[Script]StartVMs"
             }
 
             #######################################################################
-            ## Disable DHCP on the VMs and update the DHCP scope
+            ## Configure the Windows Admin Center VM - Download only
             #######################################################################
 
-            Write-Verbose "Disabling DHCP on the VMs and updating the DHCP scope" -Verbose
+            # If the user has chosen to deploy WAC, need to trigger an installation of the latest WAC build
+            if ($installWAC -eq 'Yes') {
+                Script "Download WAC" {
+                    GetScript  = {
+                        $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                        $result = (Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
+                                Write-Verbose "Checking if Windows Admin Center has been downloaded..." -Verbose
+                                [bool] (Test-Path -Path "C:\WindowsAdminCenter.exe")
+                            })
 
-            Script "DisableDhcpOnVMs" {
-                GetScript  = {
-                    $result = $false
-                    return @{ 'Result' = $result }
-                }
-                SetScript  = {
-                    $ErrorActionPreference = "SilentlyContinue"
-                    $retryCount = 0
-                    $success = $false
-                    do {
-                        try {
-                            Write-Verbose "Attempt $($retryCount + 1) to disable DHCP on the VMs" -Verbose
-                            # Get all VMs that are not the DC and disable DHCP on them
-                            $vmName = Get-VM | Where-Object { $_.Name -notlike "$Using:vmPrefix-DC" }
-                            Write-Verbose "Disabling DHCP on the following VMs: $($vmName.Name)" -Verbose
-                            ForEach ($vm in $vmName) {
-                                Write-Verbose "Disabling DHCP on $($vm.Name)" -Verbose
-                                $scriptCredential = New-Object System.Management.Automation.PSCredential (".\Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                                Invoke-Command -VMName $vm.Name -Credential $scriptCredential -ArgumentList $vm -ScriptBlock {
-                                    param ($vm)
-                                    Write-Verbose "Enable ping through the firewall on $($vm.Name)" -Verbose
-                                    # Enable PING through the firewall
-                                    Enable-NetFirewallRule -displayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
-                                    # Get all NICs and check if DHCP is enabled, and if so, disable it
-                                    # Loop until all network adapters have DHCP disabled
-                                    $maxAttempts = 5
-                                    $attempt = 0
-                                    do {
-                                        # Wait until network interfaces are available before proceeding
-                                        $maxWait = 12 # Wait up to 2 minutes (12 * 10s)
-                                        $waitCount = 0
-                                        do {
-                                            $totalInterfaces = Get-NetAdapter | Get-NetIPInterface
-                                            if (-not $totalInterfaces -or $totalInterfaces.Count -eq 0) {
-                                                Write-Verbose "No network interfaces found on $($vm.Name). VM may not be ready. Waiting before retrying..." -Verbose
-                                                Start-Sleep -Seconds 10
-                                                $waitCount++
-                                            }
-                                        } while ((-not $totalInterfaces -or $totalInterfaces.Count -eq 0) -and $waitCount -lt $maxWait)
-                                        if (-not $totalInterfaces -or $totalInterfaces.Count -eq 0) {
-                                            Write-Verbose "Still no network interfaces found on $($vm.Name) after waiting. Skipping this VM." -Verbose
-                                            $attempt++
-                                            continue
-                                        }
-                                        # Once network interfaces are available, check if DHCP is disabled on all adapters
-                                        $dhcpDisabledAdapters = Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Disabled'
-                                        # if the number of interfaces is not equal to the number of DHCP disabled adapters, then DHCP is still enabled on some adapters and need to be disabled
-                                        if ($totalInterfaces.Count -ne $dhcpDisabledAdapters.Count) {
-                                            Write-Verbose "Disabling DHCP on $($vm.Name)" -Verbose
-                                            # Disable DHCP on all NICs
-                                            Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Enabled' | Set-NetIPInterface -Dhcp Disabled
-                                            Write-Verbose "DHCP disabled on $($vm.Name)" -Verbose
-                                            # Check if DHCP is still enabled on any adapters
-                                            $dhcpEnabledAdapters = Get-NetAdapter | Get-NetIPInterface | Where-Object Dhcp -eq 'Enabled'
-                                            if ($dhcpEnabledAdapters.Count -gt 0) {
-                                                Write-Verbose "DHCP is still enabled on some adapters on $($vm.Name). Retrying..." -Verbose
-                                            }
-                                            else {
-                                                Write-Verbose "All network adapters have DHCP disabled on $($vm.Name)" -Verbose
-                                            }
-                                            Start-Sleep -Seconds 5
-                                            $attempt++
-                                        }
-                                    } while ($dhcpEnabledAdapters.Count -gt 0 -and $attempt -lt $maxAttempts)
-                                    # Release the DHCP lease on all NICs
-                                    ipconfig /release | Out-Null
-                                }
-                                $success = $true
-                                Write-Verbose "DHCP successfully disabled on all VMs" -Verbose
-                            }
+                        if ($result) {
+                            Write-Verbose "Windows Admin Center has already been downloaded." -Verbose
                         }
-                        catch {
-                            Write-Warning "Failed to disable DHCP on $($vm.Name). Error: $_" -Verbose
-                            $retryCount++
-                            if ($retryCount -lt $MaxRetries) {
-                                Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
-                                Start-Sleep -Seconds $RetryDelay
-                            }
-                            else {
-                                Throw "Maximum retries ($MaxRetries) reached. Unable to disable DHCP on $($vm.Name)."
-                            }
+                        return @{ 'Result' = $result }
+                    }
+                    SetScript  = {
+                        $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
+                        Invoke-Command -VMName "$Using:vmPrefix-WAC" -Credential $scriptCredential -ScriptBlock {
+                            $ProgressPreference = 'SilentlyContinue'
+                            Write-Verbose "Downloading Windows Admin Center..." -Verbose
+                            Invoke-WebRequest -Uri 'https://aka.ms/WACDownload' -OutFile "C:\WindowsAdminCenter.exe" -UseBasicParsing
                         }
-                    } while (-not $success -and $retryCount -lt $MaxRetries)
+                    }
+                    TestScript = {
+                        $state = [scriptblock]::Create($GetScript).Invoke()
+                        return $state.Result
+                    }
+                    DependsOn  = "[Script]UpdateNicNames"
                 }
-                TestScript = {
-                    $state = [scriptblock]::Create($GetScript).Invoke()
-                    return $state.Result
-                }
-                DependsOn  = "[Script]UpdateAzLNicNames"
             }
-
-            Script "UpdateDhcpScope" {
-                GetScript  = {
-                    $result = $false
-                    return @{ 'Result' = $result }
-                }
-                SetScript  = {
-                    $ErrorActionPreference = "SilentlyContinue"
-                    $retryCount = 0
-                    $success = $false
-                    do {
-                        try {
-                            Write-Verbose "Attempt $($retryCount + 1) to update DHCP scope" -Verbose
-                            # Get the scope from DHCP by running an Invoke-Command against the DC VM
-                            $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                            Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
-                                $DhcpScope = Get-DhcpServerv4Scope
-                                Write-Verbose "DHCP Scope: $DhcpScope" -Verbose
-                                $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
-                                Write-Verbose "Short DHCP Scope: $shortDhcpScope" -Verbose
-                                # Start the scope at 50 to allow for Deployments with SDN optional services
-                                # As per here: https://learn.microsoft.com/en-us/azure/azure-local/plan/three-node-ip-requirements?view=azloc-24113#deployments-with-sdn-optional-services
-                                $newIpStartRange = ($shortDhcpScope + ".50")
-                                Write-Verbose "Updating DHCP scope to start at $newIpStartRange to allow for additional optional Azure Local services" -Verbose
-                                Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $DhcpScope.EndRange
-                                Write-Verbose "DHCP scope updated to start at $newIpStartRange" -Verbose
-                                Get-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId | Where-Object IPAddress -like "$shortDhcpScope*" | ForEach-Object {
-                                    Remove-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId -Confirm:$false -ErrorAction SilentlyContinue
-                                    Write-Verbose "Removed DHCP lease for IP address $($_.IPAddress)" -Verbose
-                                }
-                            }
-                            $success = $true
-                            Write-Verbose "DHCP scope successfully updated" -Verbose
-                        }
-                        catch {
-                            Write-Warning "Failed to disable DHCP on $Using:vmPrefix-DC. Error: $_" -Verbose
-                            $retryCount++
-                            if ($retryCount -lt $MaxRetries) {
-                                Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
-                                Start-Sleep -Seconds $RetryDelay
-                            }
-                            else {
-                                Throw "Maximum retries ($MaxRetries) reached. Unable to update DHCP scope on $Using:vmPrefix-DC."
-                            }
-                        }
-                    } while (-not $success -and $retryCount -lt $MaxRetries)
-                }
-                TestScript = {
-                    $state = [scriptblock]::Create($GetScript).Invoke()
-                    return $state.Result
-                }
-                DependsOn  = "[Script]DisableDhcpOnVMs"
-            }
-
-            #######################################################################
-            ## Set Static IPs for the VMs
-            #######################################################################
-
-            Write-Verbose "Setting Static IPs for the VMs" -Verbose
-
-            Script "SetStaticIPs" {
-                GetScript  = {
-                    $result = $false
-                    return @{ 'Result' = $result }
-                }
-                SetScript  = {
-                    $ErrorActionPreference = "SilentlyContinue"
-                    $retryCount = 0
-                    $success = $false
-                    do {
-                        try {
-                            Write-Verbose "Attempt $($retryCount + 1) to set static IP addresses on all VMs" -Verbose
-                            $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                            $returnedValues = Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
-                                $DhcpScope = Get-DhcpServerv4Scope
-                                Write-Verbose "DHCP Scope: $DhcpScope" -Verbose
-                                $subnetMask = $DhcpScope.SubnetMask.IPAddressToString
-                                Write-Verbose "Subnet Mask: $subnetMask" -Verbose
-                                $gateway = (Get-DhcpServerv4OptionValue -ScopeId $DhcpScope.ScopeId -OptionId 3).Value
-                                Write-Verbose "Gateway: $gateway" -Verbose
-                                $dnsServers = (Get-DhcpServerv4OptionValue -ScopeId $DhcpScope.ScopeId -OptionId 6).Value
-                                Write-Verbose "DNS Servers: $dnsServers" -Verbose
-                                return $DhcpScope, $subnetMask, $gateway, $dnsServers
-                            }
-                            # Unpack the returned values
-                            $DhcpScope = $returnedValues[0]
-                            $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
-                            $subnetMask = $returnedValues[1] # Ensure it is treated as a collection
-                            # Convert subnet mask to prefix length
-                            $subnetPrefix = ((($subnetMask -split '\.').ForEach({ [Convert]::ToString($_, 2).PadLeft(8, '0') }) -join '').ToCharArray() -eq '1').count
-                            $gateway = $returnedValues[2]    # Ensure it is treated as a collection
-                            $dnsServers = @($returnedValues[3]) # Ensure it is treated as a collection
-                            $vms = $Using:vms
-
-                            # Starting at .11 for the first node, define the IP range for the AzL nodes based on the $azureLocalMachines variable
-                            $AzLIpStart = ([ipaddress]("$shortDhcpScope.11"))
-                            $AzLIpRange = @()
-                            for ($i = 0; $i -lt $Using:azureLocalMachines; $i++) {
-                                $ipBytes = $AzLIpStart.GetAddressBytes()
-                                $ipBytes[3] += $i
-                                $AzLIpRange += [ipaddress]::new($ipBytes)
-                            }
-                
-                            # Create a hashtable to store the AzL VMs and their IP addresses
-                            $AzLIpMap = @{} # Initialize as a hashtable
-                            # Iterate through the arrays to create the mapping
-                            for ($i = 0; $i -lt $vms.Count; $i++) {
-                                $AzLIpMap[$vms[$i]] = $AzLIpRange[$i].IPAddressToString
-                            }
-
-                            # Sort the hashtable by $vms and ensure it remains a hashtable
-                            $AzLIpMap = [ordered]@{}
-                            foreach ($vm in $vms | Sort-Object) {
-                                $AzLIpMap[$vm] = $AzLIpRange[$vms.IndexOf($vm)].IPAddressToString
-                            }
-                
-                            if ($Using:installWAC -eq 'Yes') {
-                                $wacIP = [ipaddress]("$shortDhcpScope.10")
-                                $AzLIpMap.Add('WAC', $wacIP.IPAddressToString)
-                            }
-
-                            # Statically assign the IP
-                            foreach ($vm in $AzLIpMap.Keys) {
-                                $vmName = "$Using:vmPrefix-$vm"
-                                $vmIpAddress = @()
-                                $vmIpAddress = @($AzLIpMap[$vm])
-
-                                $scriptCredential = New-Object System.Management.Automation.PSCredential (".\Administrator", (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                                Invoke-Command -VMName $vmName -Credential $scriptCredential -ArgumentList $vmIpAddress, $subnetPrefix, $gateway, $dnsServers, $vmName -ScriptBlock {
-                                    param ($vmIpAddress, $subnetPrefix, $gateway, $dnsServers, $vmName)
-                                    Write-Verbose "Setting static IP for $($vmName) to $($vmIpAddress)" -Verbose
-                                    # Set the static IP address for Interface Alias "Management1"
-                                    # Check if Management1 already has the desired static IP
-                                    $existingIp = Get-NetIPAddress -InterfaceAlias "Management1" -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -eq $vmIpAddress }
-                                    if (-not $existingIp) {
-                                        New-NetIPAddress -InterfaceAlias "Management1" -IPAddress $vmIpAddress -PrefixLength $subnetPrefix -DefaultGateway $gateway -Verbose
-                                    }
-                                    else {
-                                        Write-Verbose "Management1 already has IP $vmIpAddress assigned." -Verbose
-                                    }
-                                    # Set the DNS servers
-                                    Get-NetAdapter | Set-DnsClientServerAddress -ResetServerAddresses
-                                    Set-DnsClientServerAddress -InterfaceAlias "Management1" -ServerAddresses $dnsServers -Verbose
-                                }
-                                Write-Verbose "Static IP set for $vmName to $($vmIpAddress)" -Verbose
-                            }
-                            $success = $true
-                            Write-Verbose "All VMs have been assigned static IP addresses" -Verbose
-                        }
-                        catch {
-                            Write-Warning "Failed to set a static IP on $Using:vmPrefix-$vm. Error: $_" -Verbose
-                            $retryCount++
-                            if ($retryCount -lt $MaxRetries) {
-                                Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
-                                Start-Sleep -Seconds $RetryDelay
-                            }
-                            else {
-                                Throw "Maximum retries ($MaxRetries) reached. Unable to set a static IP on $Using:vmPrefix-$vm."
-                            }
-                        }
-                    } while (-not $success -and $retryCount -lt $MaxRetries)
-                }
-                TestScript = {
-                    $state = [scriptblock]::Create($GetScript).Invoke()
-                    return $state.Result
-                }
-                DependsOn  = "[Script]UpdateDhcpScope"
-            }
-
-            #######################################################################
-            ## Update DNS Records for the VMs
-            #######################################################################
-
-            Script "UpdateDNSRecords" {
-                GetScript  = {
-                    $result = $false
-                    return @{ 'Result' = $result }
-                }
-                SetScript  = {
-
-                    do {
-                        try {
-                            Write-Verbose "Attempt $($retryCount + 1) to update DNS records on the DC" -Verbose
-                            $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
-                            Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential `
-                                -ArgumentList $Using:domainName, $Using:azureLocalMachines, $Using:vms, $Using:installWAC -ScriptBlock {
-                                param ($domainName, $azureLocalMachines, $vms, $installWAC)
-
-                                # Get the current DHCP info
-                                $DhcpScope = Get-DhcpServerv4Scope
-                                $shortDhcpScope = ($DhcpScope.StartRange -split '\.')[0..2] -join '.'
-
-                                # Starting at .11 for the first AzL node, define the IP range for the AzL nodes based on the $azureLocalMachines variable
-                                $AzLIpStart = ([ipaddress]("$shortDhcpScope.11"))
-                                $AzLIpRange = @()
-                                for ($i = 0; $i -lt $azureLocalMachines; $i++) {
-                                    $ipBytes = $AzLIpStart.GetAddressBytes()
-                                    $ipBytes[3] += $i
-                                    $AzLIpRange += [ipaddress]::new($ipBytes)
-                                }
-                
-                                # Create a hashtable to store the AzL VMs and their IP addresses
-                                $AzLIpMap = @{} # Initialize as a hashtable
-                                # Iterate through the arrays to create the mapping
-                                for ($i = 0; $i -lt $vms.Count; $i++) {
-                                    $AzLIpMap[$vms[$i]] = $AzLIpRange[$i].IPAddressToString
-                                }
-
-                                # Sort the hashtable by $vms and ensure it remains a hashtable
-                                $AzLIpMap = [ordered]@{}
-                                foreach ($vm in $vms | Sort-Object) {
-                                    $AzLIpMap[$vm] = $AzLIpRange[$vms.IndexOf($vm)].IPAddressToString
-                                }
-                
-                                if ($installWAC -eq 'Yes') {
-                                    $wacIP = [ipaddress]("$shortDhcpScope.10")
-                                    $AzLIpMap.Add('WAC', $wacIP.IPAddressToString)
-                                }
-
-                                foreach ($vm in $AzLIpMap.Keys) {
-                                    $dnsName = $vm
-                                    $vmIpAddress = $AzLIpMap[$vm]
-                                    # Need to check if any DNS records exist for "AzL*"" or "WAC" and remove them
-                                    Write-Verbose "Checking for existing DNS Record for $dnsName" -Verbose
-                                    $dnsCheck = Get-DnsServerResourceRecord -Name $dnsName -ZoneName $domainName -ErrorAction SilentlyContinue
-                                    foreach ($entry in $dnsCheck) {
-                                        Write-Verbose "Cleaning up existing DNS entry for $($entry.HostName)" -Verbose
-                                        Remove-DnsServerResourceRecord $entry.HostName -ZoneName $domainName -RRType A -Force
-                                    }
-                                    Write-Verbose "Creating new DNS record for $dnsName with IP: $vmIpAddress in Zone: $domainName" -Verbose
-                                    Add-DnsServerResourceRecordA -Name $dnsName -ZoneName $domainName -IPv4Address $vmIpAddress -ErrorAction SilentlyContinue -CreatePtr
-                                }
-                            }
-                            $success = $true
-                            Write-Verbose "DNS records have been successfully updated" -Verbose
-                        }
-                        catch {
-                            Write-Warning "Failed to update DNS record on the DC for $Using:vmPrefix-$vm. Error: $_" -Verbose
-                            $retryCount++
-                            if ($retryCount -lt $MaxRetries) {
-                                Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
-                                Start-Sleep -Seconds $RetryDelay
-                            }
-                            else {
-                                Throw "Maximum retries ($MaxRetries) reached. Unable to update DNS record on the DC for $Using:vmPrefix-$vm."
-                            }
-                        }
-                    } while (-not $success -and $retryCount -lt $MaxRetries)
-                }
-                TestScript = {
-                    $state = [scriptblock]::Create($GetScript).Invoke()
-                    return $state.Result
-                }
-                DependsOn  = "[Script]SetStaticIPs"
+            else { 
+                Write-Verbose "Skipping Windows Admin Center download as it was not selected." -Verbose
             }
 
             #######################################################################
@@ -1978,7 +1702,7 @@ configuration AzLWorkshop
                     $state = [scriptblock]::Create($GetScript).Invoke()
                     return $state.Result
                 }
-                DependsOn  = "[Script]UpdateDNSRecords"
+                DependsOn  = "[Script]UpdateNicNames"
             }
 
             # Update the RDP file with customized values for the environment
