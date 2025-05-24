@@ -1072,6 +1072,8 @@ configuration AzLWorkshop
                     do {
                         try {
                             Write-Verbose "Attempt $($retryCount + 1) to update DHCP scope" -Verbose
+
+                            
                             # Get the scope from DHCP by running an Invoke-Command against the DC VM
                             $scriptCredential = New-Object System.Management.Automation.PSCredential ($Using:mslabUserName, (ConvertTo-SecureString $Using:msLabPassword -AsPlainText -Force))
                             Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ScriptBlock {
@@ -1082,30 +1084,31 @@ configuration AzLWorkshop
                                 # Start the scope at 10 with an exclusion range from 11-49 to allow for Deployments with SDN optional services
                                 # As per here: https://learn.microsoft.com/en-us/azure/azure-local/plan/three-node-ip-requirements?#deployments-with-sdn-optional-services
                                 $newIpStartRange = ($shortDhcpScope + ".10")
-                                $exclusionStatRange = ($shortDhcpScope + ".11")
                                 $exclusionEndRange = ($shortDhcpScope + ".49")
                                 Write-Verbose "Updating DHCP scope to start at $newIpStartRange" -Verbose
                                 Set-DhcpServerv4Scope -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $DhcpScope.EndRange
                                 Write-Verbose "DHCP scope updated to start at $newIpStartRange" -Verbose
                                 # Add an exclusion range for the Azure Local VMs and additional services
-                                Write-Verbose "Adding exclusion range from $exclusionStatRange to $exclusionEndRange" -Verbose
+                                Write-Verbose "Adding exclusion range from $newIpStartRange to $exclusionEndRange" -Verbose
                                 Add-Dhcpserverv4ExclusionRange -ScopeId $DhcpScope.ScopeId -StartRange $newIpStartRange -EndRange $exclusionEndRange
                                 Get-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId | Where-Object IPAddress -like "$shortDhcpScope*" | ForEach-Object {
                                     Remove-DhcpServerv4Lease -ScopeId $DhcpScope.ScopeId -Confirm:$false -ErrorAction SilentlyContinue
                                     Write-Verbose "Removed DHCP lease for IP address $($_.IPAddress)" -Verbose
                                 }
-                                # If WAC VM has been deployed, grab the MAC address of the VM and set a reservation for it
-                                if (Get-VM -Name "$Using:vmPrefix-WAC" -ErrorAction SilentlyContinue) {
-                                    $wacVm = Get-VM -Name "$Using:vmPrefix-WAC"
-                                    $wacMacAddress = ($wacVm.NetworkAdapters | Where-Object Name -eq "Management1").MacAddress
-                                    # Need to convert the MAC address to the format required by DHCP
-                                    $formattedMac = ""
-                                    for ($i = 0; $i -lt $wacMacAddress.Length; $i += 2) {
-                                        $formattedMac += $wacMacAddress.Substring($i, 2) + "-"
-                                    }
-                                    $formattedMac = $formattedMac.TrimEnd('-')
-                                    Write-Verbose "Setting DHCP reservation for WAC VM with MAC address $wacMacAddress" -Verbose
-                                    Add-DhcpServerv4Reservation -ScopeId $DhcpScope.ScopeId -IPAddress $newIpStartRange -ClientId $formattedMac -Description "WAC VM Reservation"
+                            }
+                            
+                            # If WAC VM has been deployed, grab the MAC address of the VM and set a reservation for it
+                            $wacVm = Get-VM -Name "$Using:vmPrefix-WAC" -ErrorAction SilentlyContinue
+                            if ($wacVm) {
+                                $wacMac = ($wacVm | Get-VMNetworkAdapter -Name "Management1").MacAddress
+                                $formattedMac = ($wacMac -replace '..', '$&-').TrimEnd('-')
+                                Write-Verbose "Setting DHCP reservation for WAC VM with MAC address $formattedMac" -Verbose
+                                Invoke-Command -VMName "$Using:vmPrefix-DC" -Credential $scriptCredential -ArgumentList $formattedMac -ScriptBlock {
+                                    param($formattedMac)
+                                    $scope = Get-DhcpServerv4Scope
+                                    $prefix = ($scope.StartRange -split '\.')[0..2] -join '.'
+                                    $ip = "$prefix.10"
+                                    Add-DhcpServerv4Reservation -ScopeId $scope.ScopeId -IPAddress $ip -ClientId $formattedMac -Description "WAC VM Reservation"
                                 }
                             }
                             $success = $true
