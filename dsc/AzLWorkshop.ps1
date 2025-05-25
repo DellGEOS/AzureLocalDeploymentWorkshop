@@ -1710,19 +1710,21 @@ configuration AzLWorkshop
                     do {
                         try {
                             Write-Verbose "Attempt $($retryCount + 1) to set NIC names for Azure Local VMs..." -Verbose
-                            Get-VM | Where-Object { ($_.Name -notlike "$Using:vmPrefix-DC") -and ($_.Name -like "$Using:vmPrefix*") } | ForEach-Object {
-                                Write-Verbose "Updating NIC names for $($_.Name)" -Verbose
-                                Invoke-Command -VMName $($_.Name) -Credential $scriptCredential -ScriptBlock {
+                            $vmName = Get-VM | Where-Object { ($_.Name -notlike "$Using:vmPrefix-DC") -and ($_.Name -like "$Using:vmPrefix*") }
+                            foreach ($vm in $vmName) {
+                                Write-Verbose "Updating NIC names for $($vm.Name)" -Verbose
+                                Invoke-Command -VMName $($vm.Name) -Credential $scriptCredential -ArgumentList $vm -ScriptBlock {
+                                    param ($vm)
                                     # Create a while loop to check if there are NICs with a name like "Ethernet*" and rename them
                                     $maxRetries = 5
                                     $retryCount = 0
                                     do {
                                         $adapters = Get-NetAdapter -Name "Ethernet*" -ErrorAction SilentlyContinue
                                         if ($adapters.Count -gt 0) {
-                                            Write-Verbose "Renaming NICs with names like 'Ethernet' on $($_.Name)" -Verbose
+                                            Write-Verbose "Renaming NICs with names like 'Ethernet' on $($vm.Name)" -Verbose
                                             foreach ($N in (Get-NetAdapterAdvancedProperty -DisplayName "Hyper-V Network Adapter Name" | Where-Object DisplayValue -NotLike "")) {
                                                 $N | Rename-NetAdapter -NewName $N.DisplayValue -Verbose
-                                                Write-Verbose "Renamed NIC with MAC: $($N.MacAddress) to $($N.DisplayValue)" -Verbose
+                                                Write-Verbose "Renamed NIC to $($N.DisplayValue)" -Verbose
                                             }
                                             Start-Sleep -Seconds 10
                                         }
@@ -1734,14 +1736,14 @@ configuration AzLWorkshop
                             Write-Verbose "NIC names set successfully for VMs." -Verbose
                         }
                         catch {
-                            Write-Warning "Failed to set NIC names on $($_.Name). Error: $_" -Verbose
+                            Write-Warning "Failed to set NIC names on $($vm.Name). Error: $_" -Verbose
                             $retryCount++
                             if ($retryCount -lt $MaxRetries) {
                                 Write-Verbose "Retrying in $RetryDelay seconds..." -Verbose
                                 Start-Sleep -Seconds $RetryDelay
                             }
                             else {
-                                Throw "Maximum retries ($MaxRetries) reached. Unable to set NIC names on $($_.Name)."
+                                Throw "Maximum retries ($MaxRetries) reached. Unable to set NIC names on $($vm.Name)."
                             }
                         }
                     } while (-not $success -and $retryCount -lt $MaxRetries)
