@@ -9,7 +9,7 @@ $LabConfig = @{ DomainAdminName = '<<DomainAdminName>>'; AdminPassword = '<<Admi
 # Deploy Azure Local machines
 1..<<azureLocalMachines>> | ForEach-Object { 
         $VMNames = "AzL" ; $LABConfig.VMs += @{ VMName = "$VMNames$_" ; Configuration = 'S2D' ; `
-                        ParentVHD = 'AzL_G2.vhdx' ; HDDNumber = 12; HDDSize = 4TB ; `
+                        ParentVHD = 'AzL_G2.vhdx' ; HDDNumber = 12; HDDSize = 50GB ; `
                         MemoryStartupBytes = <<azureLocalMachineMemory>>GB; MGMTNICs = 2 ; vTPM = $true ; NestedVirt = $true ; VMProcessorCount = "Max"; Unattend="NoDjoin"; DisableTimeIC = $true
         } 
 }
